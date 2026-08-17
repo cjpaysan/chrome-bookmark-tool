@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 580" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Helvetica Neue', Arial, sans-serif">
+  <!-- 窗口外壳 -->
+  <rect x="16" y="16" width="928" height="548" rx="14" fill="#ffffff" stroke="#e2e2e6" stroke-width="1"/>
+  <!-- 标题栏 -->
+  <path d="M16 30 a14 14 0 0 1 14 -14 h900 a14 14 0 0 1 14 14 v22 h-928 z" fill="#f6f6f8"/>
+  <circle cx="44" cy="41" r="6" fill="#ff5f57"/>
+  <circle cx="64" cy="41" r="6" fill="#febc2e"/>
+  <circle cx="84" cy="41" r="6" fill="#28c840"/>
+  <text x="480" y="46" text-anchor="middle" fill="#8a8a8e" font-size="13">BookmarkTool</text>
+
+  <!-- 侧边栏 -->
+  <rect x="16" y="52" width="208" height="512" fill="#f4f4f6"/>
+  <rect x="224" y="52" width="1" height="512" fill="#e2e2e6"/>
+  <text x="36" y="82" fill="#86868b" font-size="11" letter-spacing="0.5">书签来源</text>
+  <rect x="36" y="92" width="168" height="30" rx="7" fill="#ffffff" stroke="#d6d6da"/>
+  <text x="48" y="112" fill="#1d1d1f" font-size="13">同步账号 ▾</text>
+  <text x="36" y="152" fill="#86868b" font-size="11" letter-spacing="0.5">智能列表</text>
+  <rect x="32" y="162" width="176" height="30" rx="7" fill="#ffffff"/>
+  <text x="48" y="182" fill="#1d1d1f" font-size="13">全部书签</text>
+  <rect x="32" y="198" width="176" height="30" rx="7" fill="#0a84ff"/>
+  <text x="48" y="218" fill="#ffffff" font-size="13">仅看失效</text>
+  <rect x="32" y="234" width="176" height="30" rx="7" fill="#ffffff"/>
+  <text x="48" y="254" fill="#1d1d1f" font-size="13">可疑链接</text>
+  <rect x="32" y="270" width="176" height="30" rx="7" fill="#ffffff"/>
+  <text x="48" y="290" fill="#1d1d1f" font-size="13">重复书签</text>
+
+  <!-- 工具栏 -->
+  <rect x="225" y="52" width="719" height="46" fill="#fbfbfd"/>
+  <rect x="245" y="64" width="380" height="26" rx="13" fill="#ffffff" stroke="#d6d6da"/>
+  <text x="262" y="81" fill="#b0b0b5" font-size="12">🔍 搜索书签…</text>
+  <rect x="800" y="62" width="120" height="30" rx="8" fill="#0a84ff"/>
+  <text x="860" y="82" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="600">开始扫描</text>
+
+  <!-- 指标卡 -->
+  <g>
+    <rect x="245" y="112" width="168" height="64" rx="10" fill="#ffffff" stroke="#ececef"/>
+    <text x="261" y="140" fill="#86868b" font-size="12">总数</text>
+    <text x="261" y="166" fill="#1d1d1f" font-size="22" font-weight="700">1,284</text>
+    <rect x="425" y="112" width="168" height="64" rx="10" fill="#ffffff" stroke="#ececef"/>
+    <text x="441" y="140" fill="#86868b" font-size="12">有效</text>
+    <text x="441" y="166" fill="#34c759" font-size="22" font-weight="700">1,126</text>
+    <rect x="605" y="112" width="168" height="64" rx="10" fill="#ffffff" stroke="#ececef"/>
+    <text x="621" y="140" fill="#86868b" font-size="12">失效</text>
+    <text x="621" y="166" fill="#ff3b30" font-size="22" font-weight="700">73</text>
+    <rect x="785" y="112" width="135" height="64" rx="10" fill="#ffffff" stroke="#ececef"/>
+    <text x="801" y="140" fill="#86868b" font-size="12">可疑</text>
+    <text x="801" y="166" fill="#ff9500" font-size="22" font-weight="700">85</text>
+  </g>
+
+  <!-- 表头 -->
+  <rect x="245" y="190" width="675" height="28" fill="#fafafc"/>
+  <text x="261" y="208" fill="#86868b" font-size="11">☐</text>
+  <text x="300" y="208" fill="#86868b" font-size="11">标题</text>
+  <text x="560" y="208" fill="#86868b" font-size="11">网址</text>
+  <text x="860" y="208" fill="#86868b" font-size="11">状态</text>
+
+  <!-- 表格行 -->
+  <g font-size="13">
+    <!-- 行1 失效 -->
+    <rect x="245" y="218" width="675" height="44" fill="#ffffff"/>
+    <line x1="245" y1="262" x2="920" y2="262" stroke="#f0f0f2"/>
+    <text x="261" y="245" fill="#1d1d1f">☐</text>
+    <circle cx="288" cy="240" r="6" fill="#c7c7cc"/>
+    <text x="304" y="245" fill="#1d1d1f">旧博客文章</text>
+    <text x="560" y="245" fill="#9a9aa0">http://old-blog.example.com/2019/…</text>
+    <circle cx="864" cy="240" r="6" fill="#ff3b30"/><text x="878" y="245" fill="#ff3b30" font-size="12">失效</text>
+    <!-- 行2 可疑 -->
+    <rect x="245" y="262" width="675" height="44" fill="#ffffff"/>
+    <line x1="245" y1="306" x2="920" y2="306" stroke="#f0f0f2"/>
+    <text x="261" y="289" fill="#1d1d1f">☐</text>
+    <circle cx="288" cy="284" r="6" fill="#c7c7cc"/>
+    <text x="304" y="289" fill="#1d1d1f">论坛帖</text>
+    <text x="560" y="289" fill="#9a9aa0">https://forum.example.net/t/1234</text>
+    <circle cx="864" cy="284" r="6" fill="#ff9500"/><text x="878" y="289" fill="#ff9500" font-size="12">可疑</text>
+    <!-- 行3 重复 -->
+    <rect x="245" y="306" width="675" height="44" fill="#ffffff"/>
+    <line x1="245" y1="350" x2="920" y2="350" stroke="#f0f0f2"/>
+    <text x="261" y="333" fill="#1d1d1f">☐</text>
+    <circle cx="288" cy="328" r="6" fill="#c7c7cc"/>
+    <text x="304" y="333" fill="#1d1d1f">GitHub</text>
+    <text x="560" y="333" fill="#9a9aa0">https://github.com/ （重复 ×2）</text>
+    <circle cx="864" cy="328" r="6" fill="#c7c7cc"/><text x="878" y="333" fill="#86868b" font-size="12">重复</text>
+    <!-- 行4 有效 -->
+    <rect x="245" y="350" width="675" height="44" fill="#ffffff"/>
+    <line x1="245" y1="394" x2="920" y2="394" stroke="#f0f0f2"/>
+    <text x="261" y="377" fill="#1d1d1f">☐</text>
+    <circle cx="288" cy="372" r="6" fill="#c7c7cc"/>
+    <text x="304" y="377" fill="#1d1d1f">工作文档</text>
+    <text x="560" y="377" fill="#9a9aa0">https://docs.example.com/work</text>
+    <circle cx="864" cy="372" r="6" fill="#34c759"/><text x="878" y="377" fill="#34c759" font-size="12">有效</text>
+    <!-- 行5 需登录 -->
+    <rect x="245" y="394" width="675" height="44" fill="#ffffff"/>
+    <line x1="245" y1="438" x2="920" y2="438" stroke="#f0f0f2"/>
+    <text x="261" y="421" fill="#1d1d1f">☐</text>
+    <circle cx="288" cy="416" r="6" fill="#c7c7cc"/>
+    <text x="304" y="421" fill="#1d1d1f">内部系统</text>
+    <text x="560" y="421" fill="#9a9aa0">https://intra.example.com/login</text>
+    <circle cx="864" cy="416" r="6" fill="#ff9500"/><text x="878" y="421" fill="#ff9500" font-size="12">需登录</text>
+  </g>
+
+  <!-- 底部操作栏 -->
+  <rect x="245" y="452" width="675" height="96" fill="#fbfbfd"/>
+  <rect x="245" y="452" width="675" height="1" fill="#ececef"/>
+  <text x="261" y="486" fill="#1d1d1f" font-size="13" font-weight="600">已选 5 项</text>
+  <rect x="261" y="498" width="120" height="32" rx="8" fill="#ff3b30"/>
+  <text x="321" y="519" text-anchor="middle" fill="#ffffff" font-size="13">删除选中</text>
+  <rect x="395" y="498" width="120" height="32" rx="8" fill="#ffffff" stroke="#d6d6da"/>
+  <text x="455" y="519" text-anchor="middle" fill="#1d1d1f" font-size="13">导出清单</text>
+  <rect x="760" y="498" width="160" height="32" rx="8" fill="#ffffff" stroke="#0a84ff"/>
+  <text x="840" y="519" text-anchor="middle" fill="#0a84ff" font-size="13">同步到 Safari</text>
+</svg>

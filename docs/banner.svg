@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 220" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', 'Helvetica Neue', Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0a84ff"/>
+      <stop offset="1" stop-color="#5e5ce6"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="220" fill="url(#bg)"/>
+  <!-- 装饰书签图标 -->
+  <g opacity="0.18" fill="#ffffff">
+    <rect x="720" y="40" width="26" height="34" rx="5"/>
+    <rect x="760" y="64" width="26" height="34" rx="5"/>
+    <rect x="800" y="30" width="26" height="34" rx="5"/>
+    <rect x="840" y="70" width="26" height="34" rx="5"/>
+    <rect x="690" y="96" width="26" height="34" rx="5"/>
+  </g>
+  <text x="56" y="104" fill="#ffffff" font-size="52" font-weight="700">BookmarkTool</text>
+  <text x="58" y="148" fill="#eaf2ff" font-size="21">macOS 本地书签管家 · 检测失效 · 清理重复 · 同步 Safari</text>
+  <text x="58" y="184" fill="#dce8ff" font-size="15">🍎 数据完全留在你的 Mac 上 · 一键扫描 · 安全移除同步账号里删不掉的重复项</text>
+</svg>
