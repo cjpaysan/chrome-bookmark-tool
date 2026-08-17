@@ -151,6 +151,18 @@ body {
 .controls label { font-size: 13px; display: flex; align-items: center; gap: 6px; color: var(--text-secondary); }
 .chk { cursor: pointer; }
 
+/* ---------- 断点续扫提示条 ---------- */
+.resume-banner {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 16px; padding: 12px 14px;
+  border-radius: var(--radius); border: 0.5px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elevated));
+  color: var(--text-primary); font-size: 13.5px;
+}
+.resume-banner .resume-emoji { font-size: 16px; }
+.resume-banner #resumeText { flex: 1 1 auto; min-width: 160px; }
+.resume-banner .sm { padding: 5px 12px; font-size: 12.5px; }
+
 /* ---------- 原生控件 ---------- */
 select, input[type="text"], input[type="file"] {
   font-family: var(--font); font-size: 13px;

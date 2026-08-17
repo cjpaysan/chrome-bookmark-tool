@@ -45,6 +45,12 @@
       <!-- 主内容 -->
       <main class="content">
         <section class="panel">
+          <div id="resumeBanner" class="resume-banner hidden">
+            <span class="resume-emoji">⏯️</span>
+            <span id="resumeText">检测到上次未完成的扫描。</span>
+            <button id="resumeScanBtn" class="primary sm">继续扫描</button>
+            <button id="discardScanBtn" class="ghost sm">放弃</button>
+          </div>
           <div class="controls">
             <label class="chk"><input type="checkbox" id="doCheck" checked> 检测链接</label>
             <label class="chk"><input type="checkbox" id="removeDead"> 剔除死链</label>

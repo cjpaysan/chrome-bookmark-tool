@@ -6,7 +6,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { runPipeline, findChromiumProfiles } from './core/pipeline.js';
-import { loadBookmarks, buildFolderTree, parseChromeJson, parseHtmlBookmarks } from './core/parser.js';
+import { loadBookmarks, buildFolderTree, parseChromeJson, parseHtmlBookmarks, matchesSelectedFolders } from './core/parser.js';
 import { toHtml, toCsv, toJson } from './core/reporter.js';
 import { toSafariHtml } from './core/safari-export.js';
 
@@ -25,6 +25,46 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 const jobs = new Map();
 const imports = new Map();
 let lastReport = null;
+
+// 断点续扫：当前活跃扫描会话（用于增量持久化，崩溃/关闭后可续扫）
+let currentSession = null;
+let sessionSaveTimer = null;
+const SCAN_SESSION_FILE = path.join(OUTPUT, '.scan-session.json');
+
+function loadSession() {
+  try {
+    if (!fs.existsSync(SCAN_SESSION_FILE)) return null;
+    const s = JSON.parse(fs.readFileSync(SCAN_SESSION_FILE, 'utf8'));
+    if (!s || typeof s !== 'object') return null;
+    // 仅 running / paused 且未完成 视为可续扫
+    s.resumable = (s.status === 'running' || s.status === 'paused') && (s.done || 0) < (s.total || 0);
+    return s;
+  } catch { return null; }
+}
+
+// 原子写：先写临时文件再 rename，避免崩溃时写出半截 JSON 导致损坏
+function saveSession(session) {
+  try {
+    const tmp = SCAN_SESSION_FILE + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(session), 'utf8');
+    fs.renameSync(tmp, SCAN_SESSION_FILE);
+  } catch (e) { console.error('[session] 保存失败:', e.message); }
+}
+
+function deleteSession() {
+  try { fs.unlinkSync(SCAN_SESSION_FILE); } catch {}
+}
+
+// 扫描结果回调：增量写入会话文件（防抖 1.5s 落盘），保证崩溃/关闭后能从已完成处续扫
+function onScanResult(bm, finalResult) {
+  if (!currentSession) return;
+  currentSession.results[bm.url] = finalResult;
+  currentSession.done = Object.keys(currentSession.results).length;
+  currentSession.updatedAt = new Date().toISOString();
+  if (!sessionSaveTimer) {
+    sessionSaveTimer = setTimeout(() => { sessionSaveTimer = null; saveSession(currentSession); }, 1500);
+  }
+}
 
 function ensureDir(d) { try { fs.mkdirSync(d, { recursive: true }); } catch {} }
 ensureDir(UPLOADS);
@@ -723,34 +763,136 @@ const server = http.createServer(async (req, res) => {
       return sendJson(200, { ok: true, id, name, urlCount: parsed.bookmarks.length });
     }
 
-    // 开始扫描
+    // 开始扫描（含断点续扫会话落盘）
     if (url.pathname === '/api/scan' && req.method === 'POST') {
       const body = await readBody(req);
       // Web 扫描禁用文件缓存（pipeline cache:false），保证每次点「重新扫描」都是全新真实探测；
       // 否则旧缓存（7天TTL）会让代码更新后仍返回旧错误结果。
-      const jobId = randomId();
-      const job = { id: jobId, status: 'running', aborted: false, paused: false, progress: { done: 0, total: 0, current: '' }, report: null, error: null };
-      jobs.set(jobId, job);
-      sendJson(200, { ok: true, jobId });
-
+      const src = resolveSource(body);
       const folders = Array.isArray(body.folders) ? body.folders : null;
-      runPipeline({
-        ...resolveSource(body),
-        noCheck: !body.doCheck,
-        cache: false, // Web 扫描永远真实探测，不用文件缓存
-        out: OUTPUT,  // 显式指定输出目录，与静态文件服务 /output/* 保持一致（避免 cwd 与 __dirname 不一致导致文件写到别处）
+      const loaded = src.input ? loadBookmarks({ inputFile: src.input }) : loadBookmarks({ browser: src.browser, profile: src.profile });
+      let scanBookmarks = loaded.bookmarks;
+      if (folders) scanBookmarks = scanBookmarks.filter((b) => matchesSelectedFolders(b.folderPath, folders));
+      // 精简持久化字段，避免会话文件过大
+      const persistedBookmarks = scanBookmarks.map((b) => ({ url: b.url, title: b.title, folderPath: b.folderPath || [] }));
+
+      const jobId = randomId();
+      const job = { id: jobId, status: 'running', aborted: false, paused: false, progress: { done: 0, total: persistedBookmarks.length, current: '' }, report: null, error: null };
+      jobs.set(jobId, job);
+
+      // 建立断点续扫会话（立即落盘：崩溃/关闭后可续扫）
+      currentSession = {
+        id: jobId,
+        status: 'running',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        sourceLabel: loaded.profile || '书签',
+        source: src,
+        folders,
+        doCheck: !!body.doCheck,
         removeDead: !!body.removeDead,
         sort: body.sort !== false,
         contentHash: !!body.contentHash,
-        folders,
+        total: persistedBookmarks.length,
+        done: 0,
+        bookmarks: persistedBookmarks,
+        results: {},
+      };
+      saveSession(currentSession);
+
+      sendJson(200, { ok: true, jobId });
+
+      runPipeline({
+        bookmarks: scanBookmarks,
+        meta: { profile: loaded.profile },
+        noCheck: !body.doCheck,
+        cache: false, // Web 扫描永远真实探测，不用文件缓存
+        out: OUTPUT,  // 显式指定输出目录，与静态文件服务 /output/* 保持一致
+        removeDead: !!body.removeDead,
+        sort: body.sort !== false,
+        contentHash: !!body.contentHash,
         abort: () => job.aborted,
         paused: () => job.paused,
         onProgress: (done, total, bm) => { job.progress = { done, total, current: bm?.title || bm?.url || '' }; },
+        onResult: onScanResult,
       }).then(({ report }) => {
         job.report = report;
         lastReport = report;
         job.status = job.aborted ? 'stopped' : 'done';
-      }).catch((e) => { job.error = e.message; job.status = 'error'; });
+        if (currentSession && currentSession.id === jobId) {
+          currentSession.status = job.status;
+          currentSession.done = Object.keys(currentSession.results).length;
+          saveSession(currentSession);
+          deleteSession(); // 扫描完成，清理会话文件（无需续扫）
+          currentSession = null;
+        }
+      }).catch((e) => {
+        job.error = e.message; job.status = 'error';
+        if (currentSession && currentSession.id === jobId) { currentSession.status = 'error'; saveSession(currentSession); }
+      });
+      return;
+    }
+
+    // 查询可续扫会话（前端启动时检测）
+    if (url.pathname === '/api/scan/session' && req.method === 'GET') {
+      const s = loadSession();
+      if (s && s.resumable) return sendJson(200, { ok: true, resumable: true, done: s.done, total: s.total, sourceLabel: s.sourceLabel });
+      return sendJson(200, { ok: true, resumable: false });
+    }
+
+    // 放弃续扫（删除会话文件）
+    if (url.pathname === '/api/scan/discard' && req.method === 'POST') {
+      deleteSession();
+      currentSession = null;
+      return sendJson(200, { ok: true });
+    }
+
+    // 续扫：从会话文件恢复已完成结果，继续探测剩余书签
+    if (url.pathname === '/api/scan/resume' && req.method === 'POST') {
+      const s = loadSession();
+      if (!s || !s.resumable) return sendJson(400, { ok: false, error: '没有可续扫的会话。' });
+      const jobId = randomId();
+      const job = { id: jobId, status: 'running', aborted: false, paused: false, progress: { done: s.done, total: s.total, current: '' }, report: null, error: null };
+      jobs.set(jobId, job);
+
+      const completed = new Map(Object.entries(s.results || {}));
+      currentSession = s;
+      currentSession.id = jobId;
+      currentSession.status = 'running';
+      currentSession.updatedAt = new Date().toISOString();
+      saveSession(currentSession);
+
+      sendJson(200, { ok: true, jobId });
+
+      runPipeline({
+        bookmarks: s.bookmarks,
+        meta: { profile: s.sourceLabel || '续扫' },
+        noCheck: !s.doCheck,
+        cache: false,
+        out: OUTPUT,
+        removeDead: !!s.removeDead,
+        sort: s.sort !== false,
+        contentHash: !!s.contentHash,
+        completed,
+        abort: () => job.aborted,
+        paused: () => job.paused,
+        onProgress: (done, total, bm) => { job.progress = { done, total, current: bm?.title || bm?.url || '' }; },
+        onResult: onScanResult,
+      }).then(({ report }) => {
+        job.report = report;
+        lastReport = report;
+        job.status = job.aborted ? 'stopped' : 'done';
+        if (currentSession && currentSession.id === jobId) {
+          currentSession.status = job.status;
+          currentSession.done = Object.keys(currentSession.results).length;
+          saveSession(currentSession);
+          deleteSession();
+          currentSession = null;
+        }
+      }).catch((e) => {
+        job.error = e.message; job.status = 'error';
+        if (currentSession && currentSession.id === jobId) { currentSession.status = 'error'; saveSession(currentSession); }
+      });
       return;
     }
 
@@ -769,6 +911,7 @@ const server = http.createServer(async (req, res) => {
       if (!job) return sendJson(404, { ok: false, error: '任务不存在' });
       job.aborted = true;
       job.status = 'stopping';
+      if (currentSession && currentSession.id === id) { currentSession.status = 'stopped'; saveSession(currentSession); deleteSession(); currentSession = null; }
       console.log(`[server] 取消扫描任务 ${id}`);
       return sendJson(200, { ok: true });
     }
@@ -781,6 +924,7 @@ const server = http.createServer(async (req, res) => {
       if (job.status !== 'running') return sendJson(200, { ok: false, error: '当前状态不可暂停' });
       job.paused = true;
       job.status = 'paused';
+      if (currentSession && currentSession.id === id) { currentSession.status = 'paused'; saveSession(currentSession); }
       console.log(`[server] 暂停扫描任务 ${id}`);
       return sendJson(200, { ok: true });
     }
@@ -793,6 +937,7 @@ const server = http.createServer(async (req, res) => {
       if (job.status !== 'paused') return sendJson(200, { ok: false, error: '当前状态不可继续' });
       job.paused = false;
       job.status = 'running';
+      if (currentSession && currentSession.id === id) { currentSession.status = 'running'; saveSession(currentSession); }
       console.log(`[server] 继续扫描任务 ${id}`);
       return sendJson(200, { ok: true });
     }

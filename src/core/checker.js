@@ -282,12 +282,19 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * @returns {Map} url -> 检测结果（中止时返回已完成的部分结果）
  */
 export async function checkAll(bookmarks, opts = {}, handlers = {}) {
-  const { concurrency = 25, perHost = 6, timeout = 8000, retries = 1, cache = null, abort = () => false, paused = () => false } = opts;
+  const { concurrency = 25, perHost = 6, timeout = 8000, retries = 1, cache = null, abort = () => false, paused = () => false, skip = null } = opts;
   const limiter = new Limiter(concurrency, perHost);
   const total = bookmarks.length;
-  let done = 0;
+  // 断点续扫：skip 为已完成结果 Map(url->result)，预填入并计入已完成数，worker 不再重复探测
   const results = new Map();
-  const queue = bookmarks.slice();
+  if (skip && skip.size) {
+    for (const [u, r] of skip) results.set(u, r);
+  }
+  let done = results.size;
+  // 队列只保留未完成的书签（已完成的直接跳过，不重复探测也不重复计数）
+  const queue = skip && skip.size
+    ? bookmarks.filter((b) => !results.has(b.url))
+    : bookmarks.slice();
 
   // 共享中止控制器：100ms 间隔轮询 abort()，触发后立即销毁所有 in-flight socket
   // —— 仅靠 AbortSignal 在某些场景下反应慢（如目标服务器半开 TCP 连接），强制 destroy

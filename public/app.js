@@ -1,8 +1,8 @@
 const $ = (s) => document.querySelector(s);
 // BUILD 标识：语义化版本号（从 package.json 注入）+ 本次发布构建时间
 // 格式 "v1.0.5 @ 2026-08-16T20:52" — 用户一眼能看出是否升级到新版本
-const BUILD = 'v1.2.0.5 @ 2026-08-17T13:55';
-const VERSION = '1.2.0.5'; // 语义化版本号（与 package.json 一致）
+const BUILD = 'v1.2.0.6 @ 2026-08-17T14:13';
+const VERSION = '1.2.0.6'; // 语义化版本号（与 package.json 一致）
 const statusColor = { valid: '#34C759', dead: '#FF3B30', login: '#FF9500', unknown: '#8E8E93', suspect: '#FF9500' };
 const statusLabel = { valid: '有效', dead: '失效', login: '需登录', unknown: '未检测', suspect: '疑似失效' };
 // 失效/需登录等原因的中文含义，方便小白用户看懂（有效的"ok/redirect"不在此列出，原因列留空）
@@ -433,16 +433,6 @@ $('#scanBtn').addEventListener('click', async () => {
     return;
   }
   $('#result').classList.add('hidden');
-  $('#progress').classList.remove('hidden');
-  $('#bar').classList.remove('hidden');
-  setBar(0, 0);
-  $('#progress').textContent = '已提交扫描任务，准备中…';
-  $('#scanBtn').disabled = true;
-  $('#stopBtn').classList.remove('hidden');
-  $('#pauseBtn').classList.remove('hidden');
-  $('#pauseBtn').textContent = '暂停';
-  $('#pauseBtn').disabled = false;
-
   const body = {
     ...sourceBody(),
     doCheck: $('#doCheck').checked,
@@ -455,8 +445,7 @@ $('#scanBtn').addEventListener('click', async () => {
     const resp = await fetch('/api/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const data = await resp.json();
     if (!data.ok) throw new Error(data.error || '启动扫描失败');
-    currentJob = data.jobId;
-    pollJob();
+    startPolling(data.jobId);
   } catch (e) {
     resetScanUI();
     $('#progress').classList.add('hidden');
@@ -520,6 +509,23 @@ function setBar(done, total) {
   const pct = total > 0 ? Math.floor((done / total) * 100) : 0;
   $('#barfill').style.width = pct + '%';
   $('#barfill').textContent = `${done} / ${total}（${pct}%）`;
+}
+
+// 统一的扫描 UI 启动（新扫描与续扫共用）
+function startPolling(jobId) {
+  $('#result').classList.add('hidden');
+  $('#progress').classList.remove('hidden');
+  $('#bar').classList.remove('hidden');
+  setBar(0, 0);
+  $('#progress').textContent = '已提交扫描任务，准备中…';
+  $('#scanBtn').disabled = true;
+  $('#stopBtn').classList.remove('hidden');
+  $('#pauseBtn').classList.remove('hidden');
+  $('#pauseBtn').textContent = '暂停';
+  $('#pauseBtn').disabled = false;
+  $('#error').classList.add('hidden');
+  currentJob = jobId;
+  pollJob();
 }
 
 // 轮询任务进度
@@ -2107,6 +2113,36 @@ startExtStatusPolling();
   const el = document.getElementById(id);
   if (el) el.addEventListener('click', () => setViewFilter(el.dataset.view));
 });
+
+// 断点续扫：启动时检测是否有未完成的扫描会话
+async function checkResume() {
+  try {
+    const r = await (await fetch('/api/scan/session')).json();
+    if (!r.ok || !r.resumable) return;
+    $('#resumeText').textContent =
+      `检测到上次未完成的扫描（已完成 ${r.done}/${r.total}${r.sourceLabel ? '，来源：' + r.sourceLabel : ''}），是否继续？`;
+    $('#resumeBanner').classList.remove('hidden');
+  } catch {}
+}
+
+$('#resumeScanBtn').addEventListener('click', async () => {
+  $('#resumeBanner').classList.add('hidden');
+  try {
+    const data = await (await fetch('/api/scan/resume', { method: 'POST' })).json();
+    if (!data.ok) throw new Error(data.error || '续扫失败');
+    startPolling(data.jobId);
+  } catch (e) {
+    $('#error').textContent = '错误：' + e.message;
+    $('#error').classList.remove('hidden');
+  }
+});
+
+$('#discardScanBtn').addEventListener('click', async () => {
+  $('#resumeBanner').classList.add('hidden');
+  try { await fetch('/api/scan/discard', { method: 'POST' }); } catch {}
+});
+
+checkResume();
 
 // ====== 全局搜索：标题/URL/文件夹模糊匹配 + 回车直达打开 ======
 const searchOverlay = () => document.getElementById('searchOverlay');
