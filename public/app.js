@@ -1,8 +1,8 @@
 const $ = (s) => document.querySelector(s);
 // BUILD 标识：语义化版本号（从 package.json 注入）+ 本次发布构建时间
 // 格式 "v1.0.5 @ 2026-08-16T20:52" — 用户一眼能看出是否升级到新版本
-const BUILD = 'v1.2.0.3 @ 2026-08-17T12:30';
-const VERSION = '1.2.0.3'; // 语义化版本号（与 package.json 一致）
+const BUILD = 'v1.2.0.4 @ 2026-08-17T13:50';
+const VERSION = '1.2.0.4'; // 语义化版本号（与 package.json 一致）
 const statusColor = { valid: '#34C759', dead: '#FF3B30', login: '#FF9500', unknown: '#8E8E93', suspect: '#FF9500' };
 const statusLabel = { valid: '有效', dead: '失效', login: '需登录', unknown: '未检测', suspect: '疑似失效' };
 // 失效/需登录等原因的中文含义，方便小白用户看懂（有效的"ok/redirect"不在此列出，原因列留空）

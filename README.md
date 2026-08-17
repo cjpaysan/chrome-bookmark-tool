@@ -83,15 +83,38 @@ BookmarkTool 的做法：用 Chrome 官方 `chrome.bookmarks` 接口删除。删
 
 ## 📥 安装
 
-1. 到 [Releases](https://github.com/cjpaysan/chrome-bookmark-tool/releases) 下载最新的
-   `BookmarkTool-x.x.x-macos.dmg`，拖入「应用程序」。
-2. 首次打开若被 Gatekeeper 拦截（"无法验证开发者"）：
-   - 右键 → **打开**（仅拦一次）；或
-   - 终端执行 `xattr -cr /Applications/BookmarkTool.app` 后再正常打开。
-3. 启动后，顶部工具栏显示扩展连接状态、版本号与搜索框。
+> 本软件是个人分发、**未购买 Apple 开发者签名**，所以 macOS 首次打开会拦一下。下面三种方法任选其一，
+> 都只需一次，之后就能像普通 App 一样直接打开。
 
-> 本软件未使用付费开发者签名（个人分发），因此首次打开需上述一步绕过。这不是恶意软件，
-> 源代码完全公开可查。
+### 方法一 · 一键助手（最省事，推荐）
+
+1. 到 [Releases](https://github.com/cjpaysan/chrome-bookmark-tool/releases) 下载最新的
+   `BookmarkTool-x.x.x-macos.dmg`，**双击挂载**。
+2. 在弹出的窗口里，**右键（或按住 Control 点击）`install.command` → 打开**。
+   首次会提示「无法验证开发者」，点「打开」即可——这只是这一次。
+3. 脚本会自动把 app 装进「应用程序」、解除拦截并启动。
+4. 以后直接从**启动台**或**应用程序**打开 BookmarkTool，无需再运行脚本。
+
+### 方法二 · 纯手动（不用脚本）
+
+1. 下载并挂载 DMG，把 `BookmarkTool.app` 拖进「应用程序」。
+2. **右键（或 Control 点击）`BookmarkTool.app` → 打开**。
+   首次弹窗里会出现「打开」按钮，点一次；之后就能正常双击打开了。
+
+### 方法三 · 终端兜底
+
+若上述弹窗没出现「打开」按钮，打开「终端」执行下面这行，再正常打开即可：
+
+```bash
+xattr -dr com.apple.quarantine /Applications/BookmarkTool.app
+```
+
+<p align="center">
+  <img src="docs/install-guide.svg" alt="BookmarkTool 安装指引" width="920"/>
+</p>
+
+> 源码完全公开可查：[github.com/cjpaysan/chrome-bookmark-tool](https://github.com/cjpaysan/chrome-bookmark-tool)。
+> 未签名只是因为个人分发未购买付费证书，并非恶意软件。
 
 ## 🧭 使用流程
 

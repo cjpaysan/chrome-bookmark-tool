@@ -951,42 +951,6 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    // 临时调试：测试 classify 逻辑（上线前删除此接口）
-    if (url.pathname === '/api/debug/classify' && req.method === 'GET') {
-      const { classify } = await import('./core/checker.js');
-      const tests = [
-        { name: 'network_error', status: 0, error: { code: 'ECONNRESET' }, body: null },
-        { name: '404_no_body', status: 404, error: null, body: null },
-        { name: '404_fake_wp', status: 404, error: null, body: '<!DOCTYPE HTML><html lang="zh-CN"><head><meta charset="UTF-8"><title>更好的WordPress主题</title></head><body><div><p>欢迎访问我的WordPress博客</p><a href="/about">关于</a><a href="/contact">联系</a><a href="/blog">博客</a></div></body></html>' },
-        { name: '404_real', status: 404, error: null, body: '<html><head><title>404 Not Found</title></head><body><h1>404 - Page Not Found</h1></body></html>' },
-        { name: 'timeout', status: 0, error: { code: 'ETIMEDOUT' }, body: null },
-      ];
-      const results = tests.map(t => ({ name: t.name, result: classify(t.status, t.error, t.body) }));
-      return sendJson(200, { ok: true, tests: results });
-    }
-
-    // 临时调试：查看上次扫描报告中指定URL的原始数据
-    if (url.pathname === '/api/debug/report-item' && req.method === 'GET') {
-      const targetUrl = url.searchParams.get('url');
-      if (!targetUrl || !lastReport || !lastReport.bookmarks) return sendJson(400, { ok: false, error: '需要 ?url= 参数或无报告数据' });
-      const item = lastReport.bookmarks.find(b => b.url === targetUrl);
-      return sendJson(200, { ok: true, found: !!item, item: item || null });
-    }
-
-    // 临时调试：用当前服务器真实网络环境探测任意 URL（验证"浏览器能开却标红"的根因）
-    if (url.pathname === '/api/debug/probe' && req.method === 'GET') {
-      const targetUrl = url.searchParams.get('url');
-      if (!targetUrl) return sendJson(400, { ok: false, error: '需要 ?url= 参数' });
-      try {
-        const { checkAll } = await import('./core/checker.js');
-        const map = await checkAll([{ url: targetUrl, title: targetUrl }], { doCheck: true, concurrency: 1, timeout: 15000 });
-        const r = map.get(targetUrl);
-        return sendJson(200, { ok: true, url: targetUrl, result: r });
-      } catch (e) {
-        return sendJson(500, { ok: false, error: e.message });
-      }
-    }
-
     // 清除检测缓存（代码更新后必须清缓存，否则旧错误结果会持续 7 天）
     if (url.pathname === '/api/debug/clear-cache' && req.method === 'POST') {
       try {

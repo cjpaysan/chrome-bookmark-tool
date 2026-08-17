@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 300" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Helvetica Neue', sans-serif">
+  <rect width="920" height="300" rx="18" fill="#f5f5f7"/>
+  <text x="460" y="40" text-anchor="middle" font-size="20" font-weight="700" fill="#1d1d1f">三步装好 BookmarkTool（只需一次，之后和普通 App 一样）</text>
+
+  <!-- Card 1 -->
+  <g>
+    <rect x="30" y="70" width="250" height="190" rx="16" fill="#ffffff" stroke="#d2d2d7" stroke-width="1"/>
+    <circle cx="155" cy="118" r="22" fill="#0A84FF"/>
+    <text x="155" y="126" text-anchor="middle" font-size="22" font-weight="700" fill="#ffffff">1</text>
+    <!-- download icon -->
+    <rect x="133" y="150" width="44" height="34" rx="6" fill="#e8e8ed" stroke="#c7c7cc"/>
+    <line x1="155" y1="158" x2="155" y2="174" stroke="#0A84FF" stroke-width="3" stroke-linecap="round"/>
+    <path d="M148 169 L155 177 L162 169" fill="none" stroke="#0A84FF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="155" y="208" text-anchor="middle" font-size="15" font-weight="600" fill="#1d1d1f">下载并挂载 DMG</text>
+    <text x="155" y="230" text-anchor="middle" font-size="12" fill="#6e6e73">到 Releases 下载</text>
+    <text x="155" y="247" text-anchor="middle" font-size="12" fill="#6e6e73">BookmarkTool-*-macos.dmg</text>
+  </g>
+
+  <!-- arrow 1 -->
+  <path d="M292 160 L312 160 M305 153 L313 160 L305 167" fill="none" stroke="#86868b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Card 2 -->
+  <g>
+    <rect x="335" y="70" width="250" height="190" rx="16" fill="#ffffff" stroke="#d2d2d7" stroke-width="1"/>
+    <circle cx="460" cy="118" r="22" fill="#0A84FF"/>
+    <text x="460" y="126" text-anchor="middle" font-size="22" font-weight="700" fill="#ffffff">2</text>
+    <!-- terminal icon -->
+    <rect x="438" y="150" width="44" height="34" rx="6" fill="#1d1d1f"/>
+    <text x="448" y="173" font-size="15" font-weight="700" fill="#34C759" font-family="Menlo, monospace">&gt;_</text>
+    <text x="460" y="208" text-anchor="middle" font-size="15" font-weight="600" fill="#1d1d1f">右键打开助手</text>
+    <text x="460" y="230" text-anchor="middle" font-size="12" fill="#6e6e73">右键 install.command</text>
+    <text x="460" y="247" text-anchor="middle" font-size="12" fill="#6e6e73">→ 打开（仅这一次）</text>
+  </g>
+
+  <!-- arrow 2 -->
+  <path d="M597 160 L617 160 M610 153 L618 160 L610 167" fill="none" stroke="#86868b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Card 3 -->
+  <g>
+    <rect x="640" y="70" width="250" height="190" rx="16" fill="#ffffff" stroke="#d2d2d7" stroke-width="1"/>
+    <circle cx="765" cy="118" r="22" fill="#34C759"/>
+    <text x="765" y="126" text-anchor="middle" font-size="22" font-weight="700" fill="#ffffff">3</text>
+    <!-- launchpad icon -->
+    <rect x="743" y="150" width="44" height="34" rx="6" fill="#e8e8ed" stroke="#c7c7cc"/>
+    <g fill="#86868b">
+      <circle cx="753" cy="160" r="2.6"/><circle cx="763" cy="160" r="2.6"/><circle cx="773" cy="160" r="2.6"/>
+      <circle cx="753" cy="170" r="2.6"/><circle cx="763" cy="170" r="2.6"/><circle cx="773" cy="170" r="2.6"/>
+    </g>
+    <text x="765" y="208" text-anchor="middle" font-size="15" font-weight="600" fill="#1d1d1f">启动即用</text>
+    <text x="765" y="230" text-anchor="middle" font-size="12" fill="#6e6e73">从启动台打开</text>
+    <text x="765" y="247" text-anchor="middle" font-size="12" fill="#6e6e73">以后无需任何操作</text>
+  </g>
+</svg>
