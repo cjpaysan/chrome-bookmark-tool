@@ -275,13 +275,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /**
  * 批量检测书签链接（worker 池 + 队列模型，支持中止）。
  * @param {Array} bookmarks 解析出的书签列表
- * @param {object} opts {concurrency, perHost, timeout, retries, cache, abort, signal}
- *        abort: () => boolean  返回 true 时尽快停止（已取出的任务仍会完成，不再取新任务）
+ * @param {object} opts {concurrency, perHost, timeout, retries, cache, abort, paused, signal}
+ *        abort:  () => boolean  返回 true 时尽快停止（已取出的任务仍会完成，不再取新任务）
+ *        paused: () => boolean  返回 true 时挂起（worker 空闲等待，恢复后继续，不丢进度）
  * @param {object} handlers {onResult, onProgress}
  * @returns {Map} url -> 检测结果（中止时返回已完成的部分结果）
  */
 export async function checkAll(bookmarks, opts = {}, handlers = {}) {
-  const { concurrency = 25, perHost = 6, timeout = 8000, retries = 1, cache = null, abort = () => false } = opts;
+  const { concurrency = 25, perHost = 6, timeout = 8000, retries = 1, cache = null, abort = () => false, paused = () => false } = opts;
   const limiter = new Limiter(concurrency, perHost);
   const total = bookmarks.length;
   let done = 0;
@@ -304,8 +305,19 @@ export async function checkAll(bookmarks, opts = {}, handlers = {}) {
   }, 100);
   const finish = () => { clearInterval(abortWatcher); };
 
+  // 暂停挂起：paused() 为真时 worker 以 200ms 间隔空转等待，恢复后继续；
+  // abort 优先——即使处于暂停态，一旦 abort() 为真也立即放行以便收尾。
+  const waitIfPaused = () => new Promise((resolve) => {
+    if (!paused() || abort()) return resolve();
+    const iv = setInterval(() => {
+      if (!paused() || abort()) { clearInterval(iv); resolve(); }
+    }, 200);
+  });
+
   const worker = async () => {
     while (true) {
+      if (abort()) break;
+      await waitIfPaused();
       if (abort()) break;
       const bm = queue.shift();
       if (!bm) break;
@@ -333,6 +345,9 @@ export async function checkAll(bookmarks, opts = {}, handlers = {}) {
           if (code === 'AbortError' || abort()) { release(); finish(); return; } // 被中断，直接收尾
           result = { status: 0, finalUrl: url, redirectChain: [], error: e };
           if (attempt < retries) {
+            // 重试前先响应暂停：暂停态下不空耗 sleep
+            await waitIfPaused();
+            if (abort()) { release(); finish(); return; }
             // sleep 期间也响应 abort —— 避免 sleep 期间被 cancel 时仍要等 250ms+
             await Promise.race([
               sleep(250 * (attempt + 1)),

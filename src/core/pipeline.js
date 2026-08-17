@@ -33,6 +33,7 @@ export async function runPipeline(opts = {}) {
       timeout: opts.timeout || 12000,
       cache: store,
       abort: typeof opts.abort === 'function' ? opts.abort : () => false,
+      paused: typeof opts.paused === 'function' ? opts.paused : () => false,
     }, { onProgress: opts.onProgress });
     if (store) await store.flush();
   }

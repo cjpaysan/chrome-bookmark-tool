@@ -729,7 +729,7 @@ const server = http.createServer(async (req, res) => {
       // Web 扫描禁用文件缓存（pipeline cache:false），保证每次点「重新扫描」都是全新真实探测；
       // 否则旧缓存（7天TTL）会让代码更新后仍返回旧错误结果。
       const jobId = randomId();
-      const job = { id: jobId, status: 'running', aborted: false, progress: { done: 0, total: 0, current: '' }, report: null, error: null };
+      const job = { id: jobId, status: 'running', aborted: false, paused: false, progress: { done: 0, total: 0, current: '' }, report: null, error: null };
       jobs.set(jobId, job);
       sendJson(200, { ok: true, jobId });
 
@@ -744,6 +744,7 @@ const server = http.createServer(async (req, res) => {
         contentHash: !!body.contentHash,
         folders,
         abort: () => job.aborted,
+        paused: () => job.paused,
         onProgress: (done, total, bm) => { job.progress = { done, total, current: bm?.title || bm?.url || '' }; },
       }).then(({ report }) => {
         job.report = report;
@@ -769,6 +770,30 @@ const server = http.createServer(async (req, res) => {
       job.aborted = true;
       job.status = 'stopping';
       console.log(`[server] 取消扫描任务 ${id}`);
+      return sendJson(200, { ok: true });
+    }
+
+    // 暂停扫描
+    if (url.pathname.startsWith('/api/job/') && url.pathname.endsWith('/pause') && req.method === 'POST') {
+      const id = url.pathname.slice('/api/job/'.length, -'/pause'.length);
+      const job = jobs.get(id);
+      if (!job) return sendJson(404, { ok: false, error: '任务不存在' });
+      if (job.status !== 'running') return sendJson(200, { ok: false, error: '当前状态不可暂停' });
+      job.paused = true;
+      job.status = 'paused';
+      console.log(`[server] 暂停扫描任务 ${id}`);
+      return sendJson(200, { ok: true });
+    }
+
+    // 继续扫描
+    if (url.pathname.startsWith('/api/job/') && url.pathname.endsWith('/resume') && req.method === 'POST') {
+      const id = url.pathname.slice('/api/job/'.length, -'/resume'.length);
+      const job = jobs.get(id);
+      if (!job) return sendJson(404, { ok: false, error: '任务不存在' });
+      if (job.status !== 'paused') return sendJson(200, { ok: false, error: '当前状态不可继续' });
+      job.paused = false;
+      job.status = 'running';
+      console.log(`[server] 继续扫描任务 ${id}`);
       return sendJson(200, { ok: true });
     }
 
