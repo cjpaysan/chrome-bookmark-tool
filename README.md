@@ -156,3 +156,7 @@ DMG 文件名与界面版本号同步变化，方便区分每次构建。
 
 欢迎在 [Issues](https://github.com/cjpaysan/chrome-bookmark-tool/issues) 提建议或报 bug。
 如果它帮你清理了成百上千条垃圾书签，点个 ⭐ Star 就是最大的支持。
+
+## 📄 开源协议
+
+本项目基于 [MIT License](LICENSE) 开源，可自由用于学习、修改与再分发，只需保留版权声明即可。
