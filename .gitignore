@@ -28,3 +28,4 @@ package-lock.json
 
 # 用户数据示例（含个人书签数据）
 书签删除清单_*.html
+app.js
