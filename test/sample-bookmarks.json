@@ -1,0 +1,20 @@
+{
+  "checksum": "test",
+  "roots": {
+    "bookmark_bar": {
+      "children": [
+        { "type": "folder", "name": "新闻", "children": [
+          { "type": "url", "name": "Example", "url": "https://example.com/", "id": "10" },
+          { "type": "url", "name": "Example http", "url": "http://example.com", "id": "11" },
+          { "type": "url", "name": "GitHub", "url": "https://github.com/", "id": "12" }
+        ]},
+        { "type": "url", "name": "Mojibake Ã© test", "url": "https://example.org/page/", "id": "13" },
+        { "type": "url", "name": "Dead link", "url": "https://thisdomaindoesnotexist12345.com/", "id": "14" }
+      ],
+      "name": "书签栏", "type": "folder"
+    },
+    "other": { "children": [], "name": "其他书签", "type": "folder" },
+    "synced": { "children": [], "name": "移动设备书签", "type": "folder" }
+  },
+  "version": 1
+}

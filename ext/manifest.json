@@ -1,0 +1,1 @@
+{"manifest_version": 3, "name": "书签清理助手（本地桥）", "version": "1.4.1", "description": "随书签清理工具使用的常驻扩展：接收本地工具（127.0.0.1）的删除/修改/移动指令，调用官方接口删除、更新（标题/URL）或移动同步书签。只与本地通信，不做任何网络上报；装一次永久生效。（v1.4.1：减少后台日志噪音，未连接时不污染 chrome://extensions 错误列表）", "permissions": ["bookmarks", "alarms"], "host_permissions": ["http://localhost:4789/"], "background": {"service_worker": "background.js"}}

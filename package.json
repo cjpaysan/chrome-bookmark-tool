@@ -1,0 +1,87 @@
+{
+  "name": "bookmark-tool",
+  "version": "1.1.4",
+  "description": "Chrome 书签检测 / 整理 / Safari 同步工具（macOS 原生桌面版）",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "scan": "node src/cli.js scan",
+    "serve": "node src/server.js",
+    "test": "node test/run-tests.js",
+    "bump": "node scripts/bump-version.mjs",
+    "bump:major": "node scripts/bump-version.mjs major",
+    "bump:minor": "node scripts/bump-version.mjs minor",
+    "bump:patch": "node scripts/bump-version.mjs patch",
+    "sync-version": "node scripts/sync-version.mjs",
+    "bundle": "esbuild src/server.js --bundle --platform=node --format=cjs --target=node20 --outfile=electron/server.bundle.cjs --external:electron --define:import.meta.url=__BM_META_URL__ --banner:js=\"var __BM_META_URL__ = require('node:url').pathToFileURL(__filename).href;\"",
+    "dev": "npm run sync-version && npm run bundle && electron .",
+    "dist": "npm run bump:patch && npm run sync-version && npm run bundle && electron-builder --mac dmg",
+    "dist:minor": "npm run bump:minor && npm run sync-version && npm run bundle && electron-builder --mac dmg",
+    "dist:major": "npm run bump:major && npm run sync-version && npm run bundle && electron-builder --mac dmg",
+    "pack": "npm run sync-version && npm run bundle && electron-builder --mac dir"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "http-proxy-agent": "^9.1.0",
+    "https-proxy-agent": "^9.1.0"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.28.2"
+  },
+  "build": {
+    "appId": "com.local.bookmark-tool",
+    "productName": "书签整理工具",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "src/**/*",
+      "public/**/*",
+      "ext/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "ext",
+        "to": "ext"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "build/icon.icns",
+      "artifactName": "${productName}-${version}.${ext}",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "title": "书签整理工具",
+      "icon": "build/icon.icns",
+      "iconSize": 100,
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
+  },
+  "_buildAt": "2026-08-17T01:48:25.082Z"
+}
