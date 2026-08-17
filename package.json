@@ -1,6 +1,7 @@
 {
   "name": "bookmark-tool",
-  "version": "1.1.4",
+  "version": "1.2.0",
+  "displayVersion": "1.2.0.3",
   "description": "Chrome 书签检测 / 整理 / Safari 同步工具（macOS 原生桌面版）",
   "type": "module",
   "main": "electron/main.cjs",
@@ -12,13 +13,17 @@
     "bump:major": "node scripts/bump-version.mjs major",
     "bump:minor": "node scripts/bump-version.mjs minor",
     "bump:patch": "node scripts/bump-version.mjs patch",
+    "bump:build": "node scripts/bump-version.mjs build",
     "sync-version": "node scripts/sync-version.mjs",
+    "rename-dmg": "node scripts/rename-dmg.mjs",
     "bundle": "esbuild src/server.js --bundle --platform=node --format=cjs --target=node20 --outfile=electron/server.bundle.cjs --external:electron --define:import.meta.url=__BM_META_URL__ --banner:js=\"var __BM_META_URL__ = require('node:url').pathToFileURL(__filename).href;\"",
     "dev": "npm run sync-version && npm run bundle && electron .",
-    "dist": "npm run bump:patch && npm run sync-version && npm run bundle && electron-builder --mac dmg",
-    "dist:minor": "npm run bump:minor && npm run sync-version && npm run bundle && electron-builder --mac dmg",
-    "dist:major": "npm run bump:major && npm run sync-version && npm run bundle && electron-builder --mac dmg",
-    "pack": "npm run sync-version && npm run bundle && electron-builder --mac dir"
+    "dist": "npm run bump:patch && npm run sync-version && npm run bundle && electron-builder --mac dmg && npm run rename-dmg",
+    "dist:minor": "npm run bump:minor && npm run sync-version && npm run bundle && electron-builder --mac dmg && npm run rename-dmg",
+    "dist:major": "npm run bump:major && npm run sync-version && npm run bundle && electron-builder --mac dmg && npm run rename-dmg",
+    "dist:build": "npm run bump:build && npm run sync-version && npm run bundle && electron-builder --mac dmg && npm run rename-dmg",
+    "pack": "npm run dist:build",
+    "pack:dir": "npm run sync-version && npm run bundle && electron-builder --mac dir"
   },
   "engines": {
     "node": ">=18"
@@ -35,7 +40,7 @@
   },
   "build": {
     "appId": "com.local.bookmark-tool",
-    "productName": "书签整理工具",
+    "productName": "BookmarkTool",
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -61,12 +66,12 @@
         "zip"
       ],
       "icon": "build/icon.icns",
-      "artifactName": "${productName}-${version}.${ext}",
+      "artifactName": "BookmarkTool-${version}-macos.${ext}",
       "hardenedRuntime": false,
       "gatekeeperAssess": false
     },
     "dmg": {
-      "title": "书签整理工具",
+      "title": "BookmarkTool",
       "icon": "build/icon.icns",
       "iconSize": 100,
       "contents": [
@@ -83,5 +88,5 @@
       ]
     }
   },
-  "_buildAt": "2026-08-17T01:48:25.082Z"
+  "_buildAt": "2026-08-17T12:30:17.348Z"
 }

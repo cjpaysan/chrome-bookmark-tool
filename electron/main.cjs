@@ -46,11 +46,31 @@ function waitForPort(port, timeout) {
 }
 
 async function main() {
+  // 检查 server.bundle.cjs 是否存在（DMG 替换时可能损坏）
+  const bundlePath = path.join(ROOT, 'electron', 'server.bundle.cjs');
+  if (!require('node:fs').existsSync(bundlePath)) {
+    dialog.showErrorBox('BookmarkTool 启动失败',
+      '核心文件丢失：electron/server.bundle.cjs\n\n' +
+      '应用可能没正确安装，请重新从 dmg 安装（不要在 Finder 里直接"打开"解压的 app）。');
+    app.quit();
+    return;
+  }
+
   // 内嵌启动后端服务（esbuild bundle 的 CJS 单文件，依赖已内联，规避 Electron ESM loader 崩溃）
-  require(path.join(ROOT, 'electron', 'server.bundle.cjs'));
+  require(bundlePath);
 
   // 等待端口就绪（server.listen 异步，窗口不能比服务先加载）
-  await waitForPort(PORT, 15000);
+  const portReady = await waitForPort(PORT, 15000);
+  if (!portReady) {
+    dialog.showErrorBox('BookmarkTool 启动失败',
+      '内嵌服务在 15 秒内未启动（端口 ' + PORT + '）。\n\n' +
+      '可能原因：\n• 端口 ' + PORT + ' 被其他应用占用\n' +
+      '• 防火墙/安全软件拦截\n• 后端初始化失败\n\n' +
+      '请检查后重试。');
+    app.quit();
+    return;
+  }
+  console.log('[BM] server ready on port ' + PORT);
 
   let win = null;
 
@@ -64,6 +84,7 @@ async function main() {
       backgroundColor: '#f6f8fa',
       icon: path.join(ROOT, 'build', 'icon.png'),
       autoHideMenuBar: false,
+      show: false,  // 防白屏：等 ready-to-show 再显示
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -73,6 +94,21 @@ async function main() {
 
     // 加载本地 UI（服务已内嵌启动，直接访问 localhost）
     win.loadURL(`http://localhost:${PORT}/`);
+
+    // 加载失败诊断：弹窗告诉用户具体原因（不静默黑屏）
+    win.webContents.on('did-fail-load', (_e, code, desc, url) => {
+      dialog.showErrorBox('BookmarkTool 加载失败',
+        `无法加载本地 UI：\n${url}\n\n错误码 ${code}：${desc}\n\n可能原因：\n` +
+        '• 内嵌服务启动失败（端口 ' + PORT + ' 被占用）\n' +
+        '• app.asar 里的 server.bundle.cjs 损坏\n\n' +
+        '请尝试：退出应用后重新打开，或重启电脑后再试。');
+    });
+
+    // ready-to-show 后才显示（防黑屏/白屏）
+    win.once('ready-to-show', () => {
+      console.log('[BM] window ready-to-show, showing');
+      win.show();
+    });
 
     // 外部链接用系统浏览器打开（不劫持应用窗口）
     win.webContents.setWindowOpenHandler(({ url }) => {

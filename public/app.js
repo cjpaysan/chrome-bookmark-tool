@@ -1,9 +1,9 @@
 const $ = (s) => document.querySelector(s);
 // BUILD 标识：语义化版本号（从 package.json 注入）+ 本次发布构建时间
 // 格式 "v1.0.5 @ 2026-08-16T20:52" — 用户一眼能看出是否升级到新版本
-const BUILD = 'v1.1.4 @ 2026-08-17T01:48';
-const VERSION = '1.1.4'; // 语义化版本号（与 package.json 一致）
-const statusColor = { valid: '#1a7f37', dead: '#cf222e', login: '#bf8700', unknown: '#6e7781', suspect: '#d4a017' };
+const BUILD = 'v1.2.0.3 @ 2026-08-17T12:30';
+const VERSION = '1.2.0.3'; // 语义化版本号（与 package.json 一致）
+const statusColor = { valid: '#34C759', dead: '#FF3B30', login: '#FF9500', unknown: '#8E8E93', suspect: '#FF9500' };
 const statusLabel = { valid: '有效', dead: '失效', login: '需登录', unknown: '未检测', suspect: '疑似失效' };
 // 失效/需登录等原因的中文含义，方便小白用户看懂（有效的"ok/redirect"不在此列出，原因列留空）
 const REASON_CN = {
@@ -111,6 +111,30 @@ let bms = [];           // 当前报告的书签数组（供分页渲染）
 let idxByKey = null;    // url+title+folder -> globalIdx 的索引 Map（避免重复组内 O(n*m) 查找）
 let tableRendered = 0;  // 明细表已渲染行数
 const PAGE_SIZE = 150;  // 明细表每页渲染行数（避免一次性渲染近千行卡顿）
+let currentFilter = null; // 侧边栏「智能列表」视图筛选：null=不过滤；predicate(bm) 返回是否显示
+let _viewIdx = null;      // 当前筛选下的全局索引数组（null 表示用全部 bms）
+let _reviewMode = false;  // 复核弹窗打开时为 true，暂停视图筛选过滤（防止标记后条目消失）
+
+// 计算当前视图下的全局索引数组（保持全局 idx，选择/写回不受影响）
+function viewIndices() {
+  if (!currentFilter) return null;
+  const vi = [];
+  for (let i = 0; i < bms.length; i++) if (currentFilter(bms[i])) vi.push(i);
+  return vi;
+}
+// 侧边栏智能列表切换：null=全部；'dead'/'suspect'=按状态；'dups'=滚动到重复区（不筛选行）
+function setViewFilter(view) {
+  document.querySelectorAll('.nav-item').forEach((el) => el.classList.toggle('active', el.dataset.view === view));
+  if (view === 'dups') {
+    const d = document.getElementById('dups');
+    if (d) d.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  currentFilter = view === 'dead' ? (b) => b.status === 'dead'
+    : view === 'suspect' ? (b) => b.status === 'suspect'
+    : null;
+  if (reportData) render(reportData);
+}
 let currentScanSource = null; // 当前扫描来源 { browser, profile } 或 { importId }，供写回 Chrome 使用
 let sourceMeta = {};          // sourceValue -> { hasAccount, running, browser, profile }，用于判断是否同步账号
 
@@ -539,6 +563,8 @@ function render(data, partial) {
   bindDupGroupActions();
 
   // 明细表分页渲染（首屏只渲染前 PAGE_SIZE 行，避免近千行一次性卡顿）
+  // 复核弹窗打开时暂停筛选，防止标记后条目从当前视图消失
+  _viewIdx = _reviewMode ? null : viewIndices();
   tableRendered = 0;
   $('#tbl tbody').innerHTML = '';
   appendRowChunk();
@@ -554,12 +580,17 @@ function render(data, partial) {
   $('#result').classList.remove('hidden');
 }
 
-// 追加一页明细表行
+// 追加一页明细表行（受侧边栏视图筛选影响）
 function appendRowChunk() {
-  const end = Math.min(tableRendered + PAGE_SIZE, bms.length);
+  const vi = _viewIdx;
+  const total = vi ? vi.length : bms.length;
+  const end = Math.min(tableRendered + PAGE_SIZE, total);
   let html = '';
-  for (let i = tableRendered; i < end; i++) {
+  const chunk = []; // 本页渲染的全局索引，用于绑定复选框事件
+  for (let k = tableRendered; k < end; k++) {
+    const i = vi ? vi[k] : k; // 全局索引（选择/写回依赖它）
     const b = bms[i];
+    chunk.push(i);
     const c = statusColor[b.status] || '#6e7781';
     html += `<tr data-idx="${i}"><td class="chkcol"><input type="checkbox" class="bm-cb" data-idx="${i}"></td>`
       + `<td><span class="dot" style="background:${c}"></span><span class="title-cell" data-idx="${i}" title="点击修改标题" style="cursor:text">${esc(b.title)}</span> <span class="title-edit" data-idx="${i}" title="点击修改标题" style="cursor:pointer;color:#888">✎</span></td>`
@@ -571,18 +602,18 @@ function appendRowChunk() {
   }
   const tbody = $('#tbl tbody');
   tbody.insertAdjacentHTML('beforeend', html);
-  // 仅给本页新增的复选框绑定事件
-  for (let i = tableRendered; i < end; i++) {
-    const cb = tbody.querySelector(`tr[data-idx="${i}"] .bm-cb`);
+  // 仅给本页新增的复选框绑定事件（用全局索引定位行）
+  chunk.forEach((gi) => {
+    const cb = tbody.querySelector(`tr[data-idx="${gi}"] .bm-cb`);
     if (cb) cb.addEventListener('change', updateSelBar);
-  }
+  });
   tableRendered = end;
   updateSelBar();
   const btn = $('#loadMore');
   if (btn) {
-    if (tableRendered < bms.length) {
+    if (tableRendered < total) {
       btn.classList.remove('hidden');
-      btn.textContent = `加载更多（还剩 ${bms.length - tableRendered} 条）`;
+      btn.textContent = `加载更多（还剩 ${total - tableRendered} 条）`;
     } else {
       btn.classList.add('hidden');
     }
@@ -1360,6 +1391,149 @@ $('#selDeadOnly').addEventListener('click', () => {
   updateSelBar();
 });
 
+// ====== 一键复核死链：把失效/疑似失效集中到弹窗逐个验证 ======
+// 目标：解决检测误报——用户打开验证后手动标记"有效"，或确认后勾选删除。
+// 数据源：bms（已应用手动覆盖），取 status === 'dead' 或 'suspect'。
+function reviewDeadBookmarks() {
+  if (!bms.length) return alert('请先选择书签来源并扫描。');
+  const targets = bms.filter(b => b.status === 'dead' || b.status === 'suspect');
+  if (!targets.length) return alert('当前扫描结果里没有失效/疑似失效的书签，无需复核。');
+
+  _reviewMode = true; // 进入复核模式，暂停侧边栏视图筛选
+
+  const m = _msgModal();
+  const title = m.querySelector('#msgTitle');
+  const body = m.querySelector('#msgBody');
+  const actions = m.querySelector('#msgActions');
+  // 绑定右上角 × 按钮的关闭事件（与底部「关闭」按钮行为一致）
+  const closeBtn = m.querySelector('#msgClose');
+  if (closeBtn) {
+    closeBtn.onclick = () => {
+      _reviewMode = false;
+      m.classList.add('hidden');
+      render(reportData);
+    };
+  }
+  title.textContent = `🔁 复核失效书签（${targets.length} 条）`;
+  body.innerHTML = `
+    <p style="margin-bottom:8px;font-size:13px;color:#57606a">检测引擎有局限（代理/反爬/瞬时网络波动会导致误判）。逐条点「打开验证」，确认后标记状态：</p>
+    <div id="reviewList" style="max-height:380px;overflow-y:auto;border:1px solid #d0d7de;border-radius:8px;"></div>
+    <p style="margin-top:8px;font-size:12px;color:#8b949e">「标记有效」= 该书签真实可用，状态优先于自动检测；「确认失效」= 保留在待删列表。</p>`;
+  actions.innerHTML = '';
+  const cancel = document.createElement('button');
+  cancel.className = 'btn ghost';
+  cancel.textContent = '关闭';
+  cancel.onclick = () => {
+    _reviewMode = false;
+    m.classList.add('hidden');
+    render(reportData); // 关闭时重新应用视图筛选
+  };
+  actions.appendChild(cancel);
+  const selectDead = document.createElement('button');
+  selectDead.className = 'btn danger';
+  selectDead.textContent = `勾选已确认失效的`;
+  selectDead.title = '把所有标记为「确认失效」的书签在表格里勾选上';
+  selectDead.onclick = () => {
+    const toCheck = [];
+    document.querySelectorAll('.review-item[data-decision="dead"]').forEach(el => {
+      const idx = parseInt(el.dataset.idx, 10);
+      if (!Number.isNaN(idx)) toCheck.push(idx);
+    });
+    if (!toCheck.length) return alert('还没有「确认失效」的书签。先逐条判断，再点此按钮。');
+    document.querySelectorAll('.bm-cb').forEach((cb) => {
+      cb.checked = toCheck.includes(parseInt(cb.dataset.idx, 10));
+    });
+    updateSelBar();
+    _reviewMode = false;
+    m.classList.add('hidden');
+    render(reportData); // 关闭弹窗后恢复筛选并刷新
+    alert(`已在表格中勾选 ${toCheck.length} 条确认失效的书签，可点「删除选中」处理。`);
+  };
+  actions.appendChild(selectDead);
+  const allOpen = document.createElement('button');
+  allOpen.className = 'btn primary';
+  allOpen.textContent = '全部打开验证';
+  allOpen.onclick = () => {
+    document.querySelectorAll('.review-item .rv-open').forEach(b => b.click());
+  };
+  actions.appendChild(allOpen);
+
+  // 渲染每条
+  const list = body.querySelector('#reviewList');
+  list.innerHTML = '';
+  targets.forEach((b, i) => {
+    const item = document.createElement('div');
+    item.className = 'review-item';
+    item.dataset.idx = String(bms.indexOf(b));
+    item.dataset.decision = '';
+    item.style.cssText = 'padding:10px 12px;border-bottom:1px solid #eaeef2;display:flex;flex-direction:column;gap:6px;';
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    header.innerHTML = `<span style="color:${statusColor[b.status]};font-weight:600;font-size:13px;">${statusLabel[b.status]}</span>
+      <b style="flex:1;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${esc(b.title || '')}">${esc(b.title || '（无标题）')}</b>
+      <span style="font-size:11px;color:#8b949e">${b.folder ? '📁 ' + esc(b.folder) : ''}</span>`;
+    item.appendChild(header);
+    const urlLine = document.createElement('div');
+    urlLine.style.cssText = 'font-size:11px;color:#57606a;word-break:break-all;';
+    urlLine.innerHTML = `${reasonText(b.reason, b.status, b.status === 'suspect', b.note)}<br><span style="opacity:.75">${esc(b.url)}</span>`;
+    item.appendChild(urlLine);
+    const btns = document.createElement('div');
+    btns.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;';
+    btns.innerHTML = `
+      <button class="ghost sm rv-open" data-url="${esc(b.url)}">🌐 打开验证</button>
+      <button class="sm ok rv-ok" data-idx="${item.dataset.idx}">✅ 标记有效</button>
+      <button class="sm danger rv-dead" data-idx="${item.dataset.idx}">🗑 确认失效</button>`;
+    item.appendChild(btns);
+    list.appendChild(item);
+  });
+
+  // 事件绑定（打开 / 标记）
+  list.querySelectorAll('.rv-open').forEach(btn => {
+    btn.addEventListener('click', () => {
+      // Electron 中由 main.cjs 的 setWindowOpenHandler 转交系统浏览器
+      window.open(btn.dataset.url, '_blank');
+    });
+  });
+  list.querySelectorAll('.rv-ok').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.idx, 10);
+      const bm = bms[idx];
+      if (!bm) return;
+      setManualStatus(bm.url, 'valid');
+      // 同步内存数据，保证关闭弹窗后刷新时状态一致
+      bms[idx] = { ...bm, status: 'valid', manual: true };
+      // 更新弹窗内状态显示
+      btn.closest('.review-item').dataset.decision = 'ok';
+      btn.closest('.review-item').querySelector('span[style*="font-weight:600"]').textContent = '✅ 有效（已标记）';
+      btn.closest('.review-item').querySelector('span[style*="font-weight:600"]').style.color = statusColor.valid;
+      btn.disabled = true;
+      btn.textContent = '已标记有效';
+      btn.nextElementSibling && (btn.nextElementSibling.disabled = true);
+    });
+  });
+  list.querySelectorAll('.rv-dead').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.idx, 10);
+      const bm = bms[idx];
+      if (!bm) return;
+      setManualStatus(bm.url, 'dead');
+      // 同步内存数据
+      bms[idx] = { ...bm, status: 'dead', manual: true };
+      btn.closest('.review-item').dataset.decision = 'dead';
+      btn.closest('.review-item').querySelector('span[style*="font-weight:600"]').textContent = '🗑 失效（确认）';
+      btn.closest('.review-item').querySelector('span[style*="font-weight:600"]').style.color = statusColor.dead;
+      btn.disabled = true;
+      btn.textContent = '已确认失效';
+      btn.previousElementSibling && (btn.previousElementSibling.disabled = true);
+    });
+  });
+
+  m.classList.remove('hidden');
+  // 打开弹窗后刷新主表（标记会立即反映在表格里）——re-render 当前数据
+  render(reportData);
+}
+$('#selReview').addEventListener('click', reviewDeadBookmarks);
+
 // 批量打开选中链接
 $('#selOpen').addEventListener('click', () => {
   const bms = selectedBookmarks();
@@ -1456,6 +1630,9 @@ function openMoveDialog(bms) {
   const title = m.querySelector('#msgTitle');
   const body = m.querySelector('#msgBody');
   const actions = m.querySelector('#msgActions');
+  // 绑定右上角 × 关闭按钮
+  const closeBtn = m.querySelector('#msgClose');
+  if (closeBtn) closeBtn.onclick = () => { m.classList.add('hidden'); };
   title.textContent = `移动 ${bms.length} 个书签到…`;
   body.innerHTML = '<p style="margin-bottom:8px;font-size:13px;color:#57606a">选择目标文件夹（Chrome 中真实生效）：</p>'
     + '<input id="moveFolderFilter" type="text" placeholder="搜索/过滤文件夹（输入关键词过滤树）" autocomplete="off" style="width:100%;padding:7px 10px;border:1px solid #d0d7de;border-radius:6px;font-size:13px;box-sizing:border-box;margin-bottom:6px;" />'
@@ -1710,6 +1887,35 @@ function startExtStatusPolling() {
   scheduleNextExtPoll();
 }
 
+// 就地更新顶部指标卡数字（状态修改后调用，不重渲染整表）
+function updateCards() {
+  if (!bms.length || !$('#cards')) return;
+  const counts = { valid: 0, dead: 0, login: 0, suspect: 0, unknown: 0 };
+  bms.forEach(b => { counts[b.status] = (counts[b.status] || 0) + 1; });
+  const s = reportData ? reportData.summary : {};
+  $('#cards').innerHTML = [
+    ['书签总数', bms.length], ['有效', counts.valid, 'ok'],
+    ['失效', counts.dead, 'bad'], ['需登录', counts.login, 'warn'],
+    ['疑似失效', counts.suspect, 'warn'], ['未检测', counts.unknown || 0], ['合并重复', s.merged],
+    ['整理后保留', s.kept],
+  ].map(([label, val, cls]) => `<div class="card ${cls || ''}"><b>${val}</b><span>${label}</span></div>`).join('');
+}
+
+// 就地更新表格某一行的状态视觉（不触发 render，避免视图筛选把行吃掉）
+function updateRowStatus(cell, idx, status) {
+  const row = cell.closest('tr');
+  if (!row) return;
+  // 更新状态单元格内容
+  const label = statusLabel[status] || status;
+  const color = statusColor[status] || '#6e7781';
+  cell.innerHTML = `<span class="st-dot" style="background:${color}"></span><span class="st-label" style="color:${color}">${esc(label)}</span>`;
+  cell.dataset.status = status;
+  // 给行加一个闪烁提示（状态刚改过）
+  row.style.transition = 'background-color .3s';
+  row.style.backgroundColor = 'var(--row-hover, rgba(10,132,255,0.06))';
+  setTimeout(() => { if (row) row.style.backgroundColor = ''; }, 800);
+}
+
 // 表格内交互（点击状态/标题/URL）—— 委托到 #tbl tbody，新插入的行自动生效
 function bindTableInteractions() {
   const tbody = $('#tbl tbody');
@@ -1727,17 +1933,29 @@ function bindTableInteractions() {
       const url = bm.url;
       const manual = getManualStatus(url);
       const cur = manual || bm.status;
-      console.log('[status-click]', url, 'cur=' + cur, 'manual=' + manual);
       let next;
+      // Shift+点击 → 清除手动标记（恢复原始检测状态）
       if (e.shiftKey && manual) next = null;
-      else if (cur === 'suspect') next = 'valid';
-      else if (cur === 'valid') next = 'dead';
-      else if (cur === 'dead') next = 'valid';
+      // 状态循环：suspect ↔ dead（可疑和失效之间直接切换），其他统一→valid
+      else if (cur === 'suspect') next = 'dead';     // 可疑 → 直接标失效
+      else if (cur === 'dead') next = 'valid';       // 失效 → 标有效
+      else if (cur === 'valid') next = 'dead';       // 有效 → 标失效
       else next = 'valid';
+
       try {
         setManualStatus(url, next);
-        render(reportData, false);
-        console.log('[status-click] OK -> ' + next);
+        // 就地更新内存中的 bms[]（让后续操作读到最新状态）
+        if (next) {
+          bms[idx] = { ...bm, status: next, manual: true };
+        } else {
+          // 清除手动标记时恢复原始状态
+          bms[idx] = { ...bm, status: bm._origStatus || bm.status, manual: undefined };
+        }
+        // 就地更新该行 DOM 的视觉状态，不重渲染整表（避免视图筛选把行吃掉）
+        updateRowStatus(cell, idx, next || bms[idx].status);
+        updateSelBar();
+        updateCards();
+        console.log('[status-click] OK ->', next || '(cleared)');
       } catch (err) {
         console.error('[status-click] ERR', err);
         alert('状态切换失败：' + err.message);
@@ -1846,6 +2064,12 @@ function flashRow(el, kind) {
 loadProfiles();
 startExtStatusPolling();
 
+// 侧边栏「智能列表」导航：全部 / 仅看死链 / 可疑链接 / 重复书签
+['navAll', 'navDead', 'navSuspect', 'navDups'].forEach((id) => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('click', () => setViewFilter(el.dataset.view));
+});
+
 // ====== 全局搜索：标题/URL/文件夹模糊匹配 + 回车直达打开 ======
 const searchOverlay = () => document.getElementById('searchOverlay');
 const searchInput = () => document.getElementById('searchInput');
@@ -1931,7 +2155,7 @@ function renderSearchResults(q) {
 }
 
 function renderResultItems(box, list) {
-  const colors = { valid: '#1a7f37', dead: '#cf222e', login: '#bf8700', unknown: '#6e7781', suspect: '#d4a017' };
+  const colors = { valid: '#34C759', dead: '#FF3B30', login: '#FF9500', unknown: '#8E8E93', suspect: '#FF9500' };
   list.forEach((b, i) => {
     const row = document.createElement('div');
     row.className = 'search-result' + (i === _searchIdx ? ' active' : '');

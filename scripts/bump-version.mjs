@@ -1,38 +1,59 @@
 #!/usr/bin/env node
-// bump-version.mjs — 自动递增 package.json 的 patch 版本号
-// 用法：node scripts/bump-version.mjs [major|minor|patch]
-// 默认 patch。无需 git 依赖（--no-git-tag-version 等价效果）。
+// bump-version.mjs — 按改动量递增版本号（双字段设计）
 //
-// 设计：
-// 1. 读 package.json 当前 version（SemVer: MAJOR.MINOR.PATCH）
-// 2. 按指定级别 +1，其它级别归零
-// 3. 写回 package.json
-// 4. 同步输出版本号，让调用者（npm scripts）捕获到
+// 两个字段：
+//   version        : 三段 SemVer（MAJOR.MINOR.PATCH），仅供 electron-builder 读取；
+//                    必须是合法 SemVer，否则构建会被 app-builder-lib 拒绝。
+//   displayVersion : 四段展示版（MAJOR.MINOR.PATCH.BUILD），界面与 DMG 文件名使用，
+//                    不受 SemVer 限制，可自由带第四位。
+//
+// 用法：node scripts/bump-version.mjs [major|minor|patch|build]
+// 默认 build（极小改动，仅第四位 +1）。
+//
+// 增量规则（改动量 → 增量大小）：
+//   build : 极小改动（几行 hotfix）    → 1.2.0.0 → 1.2.0.1
+//   patch : 小改动（一个功能/若干文件）→ 1.2.0.0 → 1.2.1.0
+//   minor : 中等改动（新功能模块）     → 1.2.0.0 → 1.3.0.0
+//   major : 大改（架构/重写）          → 1.2.0.0 → 2.0.0.0
+// 说明：build 之外的级别都会把第四位 BUILD 归零，保持版本语义单调。
 
 import fs from 'node:fs';
 import path from 'node:path';
 
 const PKG = path.join(process.cwd(), 'package.json');
-const level = (process.argv[2] || 'patch').toLowerCase();
+const level = (process.argv[2] || 'build').toLowerCase();
 
-if (!['major', 'minor', 'patch'].includes(level)) {
-  console.error('❌ level 必须是 major/minor/patch');
+if (!['major', 'minor', 'patch', 'build'].includes(level)) {
+  console.error('❌ level 必须是 major/minor/patch/build');
   process.exit(1);
 }
 
 const pkg = JSON.parse(fs.readFileSync(PKG, 'utf8'));
-const [maj, min, pat] = pkg.version.split('.').map(Number);
-let next;
-if (level === 'major') next = `${maj + 1}.0.0`;
-else if (level === 'minor') next = `${maj}.${min + 1}.0`;
-else next = `${maj}.${min}.${pat + 1}`;
 
-pkg.version = next;
-// 加 build 时间戳（仅作记录，不影响 SemVer 解析）
+// 解析四段 displayVersion（缺省时从 version 派生，第四段补 0）
+function parseFour(s) {
+  const parts = String(s).split('.').map((x) => parseInt(x, 10) || 0);
+  return [parts[0] || 0, parts[1] || 0, parts[2] || 0, parts[3] || 0];
+}
+
+let [maj, min, pat, bld] = parseFour(pkg.displayVersion || pkg.version);
+
+switch (level) {
+  case 'major': maj += 1; min = 0; pat = 0; bld = 0; break;
+  case 'minor': min += 1; pat = 0; bld = 0; break;
+  case 'patch': pat += 1; bld = 0; break;
+  case 'build': bld += 1; break;
+}
+
+const displayVersion = `${maj}.${min}.${pat}.${bld}`;
+const version = `${maj}.${min}.${pat}`; // 三段，合法 SemVer
+
+pkg.displayVersion = displayVersion;
+pkg.version = version;
 pkg._buildAt = new Date().toISOString();
+
 fs.writeFileSync(PKG, JSON.stringify(pkg, null, 2) + '\n');
 
-console.log(`✅ version bumped → ${next}`);
-console.log(`   (level=${level}, was ${maj}.${min}.${pat})`);
-// 同时让 npm scripts 能拿到新版本（写到 stdout 末尾）
-console.log(`__VERSION__=${next}`);
+console.log(`✅ version bumped (${level})`);
+console.log(`   displayVersion   : ${displayVersion}`);
+console.log(`   version (semver) : ${version}`);

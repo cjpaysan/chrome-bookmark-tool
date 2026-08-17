@@ -3,87 +3,110 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>书签检测 · 整理 · Safari 同步</title>
-  <link rel="stylesheet" href="/style.css?v=10">
+  <title>书签整理工具</title>
+  <link rel="stylesheet" href="/style.css?v=11">
 </head>
 <body>
-  <header>
-    <h1>🔖 书签检测 / 整理 / Safari 同步</h1>
-    <p class="sub">测试版 · 读取 Chrome 书签 → 检测有效性 → 查重 → 整理 → 同步 Safari</p>
-    <span id="extStatus" class="ext-status ext-off" title="随附扩展连接状态：用于自动删除同步账号书签（装一次即可，永久生效）">随附扩展：未连接</span>
-  <button id="downloadExtBtn" class="ext-download-btn" title="下载随附 Chrome 扩展包（解压后在 chrome://extensions 加载）">📦 下载扩展</button>
-  <span id="buildTag" class="build-tag" title="当前版本（强刷页面会更新 BUILD 时间戳）；关于对话框里有完整版本号">加载中...</span>
-  <button id="searchBtn" class="search-btn" title="全局搜索书签（快捷键 ⌘F）">🔍 搜索书签</button>
-  </header>
-
-  <section class="panel">
-    <div class="controls">
-      <label>书签来源
-        <select id="profile"><option value="">请选择书签来源…</option></select>
-      </label>
-      <button id="exploreBtn" class="ghost" title="重新扫描本机已安装的浏览器，刷新「书签来源」列表">🔄 刷新来源</button>
-      <button id="importBtn" class="ghost" title="从 Chrome 导出的 HTML / JSON 文件导入书签">手动导入文件</button>
-      <input type="file" id="importFile" accept=".json,.html,.htm" hidden>
-    </div>
-    <div id="sourceHint" class="sourcehint muted"></div>
-    <div class="controls">
-      <label class="chk"><input type="checkbox" id="doCheck" checked> 检测链接</label>
-      <label class="chk"><input type="checkbox" id="removeDead"> 剔除死链</label>
-      <label class="chk"><input type="checkbox" id="doSort" checked> 文件夹内排序</label>
-      <button id="scanBtn">开始扫描</button>
-      <button id="stopBtn" class="stop hidden">停止扫描</button>
-    </div>
-
-    <div class="folderpanel">
-      <div class="folderhead">
-        <span>扫描范围（按 Chrome 文件夹，默认全选；勾选父文件夹即包含其全部子文件夹）：</span>
-        <span class="folderactions">
-          <a id="selAll" class="link">全选</a>
-          <a id="selNone" class="link">全不选</a>
-          <a id="toggleTree" class="link">折叠/展开</a>
-        </span>
+  <div class="app">
+    <!-- 顶部工具栏（浅色，位于系统标题栏之下） -->
+    <header class="toolbar">
+      <div class="toolbar-title">书签整理工具</div>
+      <div class="toolbar-actions">
+        <span id="extStatus" class="ext-status ext-off" title="随附扩展连接状态：用于自动删除同步账号书签（装一次即可，永久生效）">随附扩展：未连接</span>
+        <button id="downloadExtBtn" class="ext-download-btn" title="下载随附 Chrome 扩展包（解压后在 chrome://extensions 加载）">下载扩展</button>
+        <span id="buildTag" class="build-tag" title="当前版本（强刷页面会更新 BUILD 时间戳）；关于对话框里有完整版本号">加载中...</span>
+        <button id="searchBtn" class="search-btn" title="全局搜索书签（快捷键 ⌘F）">搜索书签</button>
       </div>
-      <div id="folderTree" class="foldertree"><span class="muted">选择来源后显示文件夹…</span></div>
-    </div>
+    </header>
 
-    <div id="progress" class="progress hidden"></div>
-    <div id="bar" class="bar hidden"><div id="barfill" class="barfill"></div></div>
-  </section>
+    <div class="layout">
+      <!-- 左侧栏 -->
+      <aside class="sidebar">
+        <div class="side-section">
+          <div class="side-label">书签来源</div>
+          <select id="profile"><option value="">请选择书签来源…</option></select>
+          <div class="side-source-actions">
+            <button id="exploreBtn" class="side-link" title="重新扫描本机已安装的浏览器，刷新「书签来源」列表">刷新来源</button>
+            <button id="importBtn" class="side-link" title="从 Chrome 导出的 HTML / JSON 文件导入书签">手动导入</button>
+          </div>
+          <input type="file" id="importFile" accept=".json,.html,.htm" hidden>
+          <div id="sourceHint" class="side-hint muted"></div>
+        </div>
 
-  <section id="result" class="hidden">
-    <div id="cards" class="cards"></div>
-    <h2>重复 / 冗余书签 <span id="dupCount" class="muted"></span></h2>
-    <div id="dups"></div>
-    <h2>书签明细</h2>
-    <div id="selectionBar" class="selbar hidden">
-      <span class="selinfo">已选 <b id="selCount">0</b> 条</span>
-      <div class="selactions">
-        <button id="selAllBms" class="ghost sm">全选</button>
-        <button id="selNoneBms" class="ghost sm">全不选</button>
-        <button id="selDeadOnly" class="ghost sm">仅选失效</button>
-        <button id="selOpen" class="ghost sm">批量打开链接</button>
-        <button id="selMove" class="ghost sm" title="把选中的书签移动到其他文件夹（需随附扩展已连接，写回 Chrome）">📁 移动到…</button>
-        <button id="selDel" class="sm danger">删除选中</button>
-        <button id="selExport" class="sm primary">导出选中</button>
-        <select id="selExportFmt" class="sm"><option value="html">HTML 报告</option><option value="csv">CSV</option><option value="safari">Safari 导入文件</option></select>
-        <button id="syncUpdates" class="sm primary" title="把表格里改过的标题/URL 批量写回 Chrome 书签（需随附扩展已连接）">🔄 同步修改到 Chrome <span id="pendingCount" style="opacity:.85"></span></button>
-      </div>
-    </div>
-    <div class="tablewrap"><table id="tbl"><thead>
-      <tr><th class="chkcol"><input type="checkbox" id="tblCheckAll"></th><th>标题</th><th>URL</th><th>文件夹</th><th>状态</th><th>原因</th><th>重复组</th></tr>
-    </thead><tbody></tbody></table></div>
-    <div class="tablemore"><button id="loadMore" class="ghost hidden">加载更多</button></div>
-    <h2>导出</h2>
-    <div class="exports">
-      <a id="exHtml" class="btn" target="_blank">HTML 报告</a>
-      <a id="exCsv" class="btn" target="_blank">CSV</a>
-      <a id="exJson" class="btn" target="_blank">JSON</a>
-      <a id="exSafari" class="btn primary" target="_blank">Safari 导入文件</a>
-      <button id="safariImport" class="btn primary" title="导出 Safari 可导入的书签文件到「下载」目录，并提示手动导入步骤">🍎 导出 Safari 书签</button>
-    </div>
-  </section>
+        <div class="side-section">
+          <div class="side-label">智能列表</div>
+          <button class="nav-item active" data-view="all" id="navAll"><span class="nav-dot" style="background:var(--text-tertiary)"></span>全部书签</button>
+          <button class="nav-item" data-view="dead" id="navDead"><span class="nav-dot" style="background:var(--st-dead)"></span>仅看死链</button>
+          <button class="nav-item" data-view="suspect" id="navSuspect"><span class="nav-dot" style="background:var(--st-suspect)"></span>可疑链接</button>
+          <button class="nav-item" data-view="dups" id="navDups"><span class="nav-dot" style="background:var(--accent)"></span>重复书签</button>
+        </div>
+      </aside>
 
-  <div id="error" class="error hidden"></div>
+      <!-- 主内容 -->
+      <main class="content">
+        <section class="panel">
+          <div class="controls">
+            <label class="chk"><input type="checkbox" id="doCheck" checked> 检测链接</label>
+            <label class="chk"><input type="checkbox" id="removeDead"> 剔除死链</label>
+            <label class="chk"><input type="checkbox" id="doSort" checked> 文件夹内排序</label>
+            <button id="scanBtn" class="primary">开始扫描</button>
+            <button id="stopBtn" class="stop hidden">停止扫描</button>
+          </div>
+
+          <div class="folderpanel">
+            <div class="folderhead">
+              <span>扫描范围（按 Chrome 文件夹，默认全选；勾选父文件夹即包含其全部子文件夹）：</span>
+              <span class="folderactions">
+                <a id="selAll" class="link">全选</a>
+                <a id="selNone" class="link">全不选</a>
+                <a id="toggleTree" class="link">折叠/展开</a>
+              </span>
+            </div>
+            <div id="folderTree" class="foldertree"><span class="muted">选择来源后显示文件夹…</span></div>
+          </div>
+
+          <div id="progress" class="progress hidden"></div>
+          <div id="bar" class="bar hidden"><div id="barfill" class="barfill"></div></div>
+        </section>
+
+        <section id="result" class="hidden">
+          <div id="cards" class="cards"></div>
+          <h2>重复 / 冗余书签 <span id="dupCount" class="muted"></span></h2>
+          <div id="dups"></div>
+          <h2>书签明细</h2>
+          <div id="selectionBar" class="selbar hidden">
+            <span class="selinfo">已选 <b id="selCount">0</b> 条</span>
+            <div class="selactions">
+              <button id="selAllBms" class="ghost sm">全选</button>
+              <button id="selNoneBms" class="ghost sm">全不选</button>
+              <button id="selDeadOnly" class="ghost sm">仅选失效</button>
+              <button id="selReview" class="ghost sm" title="一键复核失效/疑似失效的书签：逐个打开验证 → 标记有效或确认删除">一键复核死链</button>
+              <button id="selOpen" class="ghost sm">批量打开链接</button>
+              <button id="selMove" class="ghost sm" title="把选中的书签移动到其他文件夹（需随附扩展已连接，写回 Chrome）">移动到…</button>
+              <button id="selDel" class="sm danger">删除选中</button>
+              <button id="selExport" class="sm primary">导出选中</button>
+              <select id="selExportFmt" class="sm"><option value="html">HTML 报告</option><option value="csv">CSV</option><option value="safari">Safari 导入文件</option></select>
+              <button id="syncUpdates" class="sm primary" title="把表格里改过的标题/URL 批量写回 Chrome 书签（需随附扩展已连接）">同步修改到 Chrome <span id="pendingCount" style="opacity:.85"></span></button>
+            </div>
+          </div>
+          <div class="tablewrap"><table id="tbl"><thead>
+            <tr><th class="chkcol"><input type="checkbox" id="tblCheckAll"></th><th>标题</th><th>URL</th><th>文件夹</th><th>状态</th><th>原因</th><th>重复组</th></tr>
+          </thead><tbody></tbody></table></div>
+          <div class="tablemore"><button id="loadMore" class="ghost hidden">加载更多</button></div>
+          <h2>导出</h2>
+          <div class="exports">
+            <a id="exHtml" class="btn" target="_blank">HTML 报告</a>
+            <a id="exCsv" class="btn" target="_blank">CSV</a>
+            <a id="exJson" class="btn" target="_blank">JSON</a>
+            <a id="exSafari" class="btn primary" target="_blank">Safari 导入文件</a>
+            <button id="safariImport" class="btn primary" title="导出 Safari 可导入的书签文件到「下载」目录，并提示手动导入步骤">导出 Safari 书签</button>
+          </div>
+        </section>
+
+        <div id="error" class="error hidden"></div>
+      </main>
+    </div>
+  </div>
 
   <!-- 同步账号删除：一次性临时扩展流程弹窗 -->
   <div id="syncedModal" class="modal hidden">
@@ -95,17 +118,17 @@
     </div>
   </div>
 
-<!-- 一键导入 Safari：分步引导弹窗 -->
+  <!-- 一键导入 Safari：分步引导弹窗 -->
   <div id="safariModal" class="modal hidden">
     <div class="modal-card safari-modal-card">
-      <h3>🍎 一键导入 Safari</h3>
+      <h3>一键导入 Safari</h3>
       <button class="modal-close" id="safariClose" title="关闭">&times;</button>
       <div id="safariBody" class="modal-body"></div>
       <div id="safariActions" class="modal-actions"></div>
     </div>
   </div>
 
-  <!-- 通用 alert modal（Electron 中 alert() 不可用，in-page 替代） -->
+  <!-- 通用 alert modal -->
   <div id="msgModal" class="modal hidden">
     <div class="modal-card msg-modal-card">
       <h3 id="msgTitle">提示</h3>
@@ -115,15 +138,15 @@
     </div>
   </div>
 
-  <!-- 通用 prompt modal（Electron 中 prompt() 不可用，in-page 替代） -->
+  <!-- 通用 prompt modal -->
   <div id="promptModal" class="modal hidden">
     <div class="modal-card prompt-modal-card">
       <h3 id="promptTitle">输入</h3>
       <button class="modal-close" id="promptClose" title="关闭">&times;</button>
       <div class="modal-body">
-        <div id="promptMessage" style="margin-bottom:10px;color:#1f2328;white-space:pre-wrap;line-height:1.5;"></div>
-        <input id="promptInput" type="text" style="width:100%;padding:8px 10px;border:1px solid #d0d7de;border-radius:6px;font-size:14px;font-family:inherit;box-sizing:border-box;" autocomplete="off" />
-        <div id="promptError" style="color:#cf222e;font-size:12px;margin-top:6px;display:none;"></div>
+        <div id="promptMessage" style="margin-bottom:10px;color:var(--text-primary);white-space:pre-wrap;line-height:1.5;"></div>
+        <input id="promptInput" type="text" style="width:100%;padding:8px 10px;border:0.5px solid var(--hairline-strong);border-radius:6px;font-size:14px;font-family:inherit;box-sizing:border-box;background:var(--bg-elevated);color:var(--text-primary);" autocomplete="off" />
+        <div id="promptError" style="color:var(--st-dead);font-size:12px;margin-top:6px;display:none;"></div>
       </div>
       <div class="modal-actions">
         <button class="btn ghost" id="promptCancel">取消</button>
@@ -132,7 +155,7 @@
     </div>
   </div>
 
-  <!-- 全局搜索（Cmd+F / 顶部搜索按钮触发）：输入即搜，回车直达打开 -->
+  <!-- 全局搜索（Cmd+F / 顶部搜索按钮触发） -->
   <div id="searchOverlay" class="search-overlay hidden">
     <div class="search-box">
       <div class="search-input-row">
@@ -145,6 +168,6 @@
     </div>
   </div>
 
-<script src="/app.js?v=27"></script>
+  <script src="/app.js?v=29"></script>
 </body>
 </html>

@@ -21,8 +21,11 @@ STAGE_DIR="$DIST_DIR/friend-package"
 PKG_NAME="书签整理工具-朋友安装包-v$VERSION.zip"
 README="$STAGE_DIR/使用说明.txt"
 
-# 找最新 DMG（按文件名里的数字版本号排序，取最大；排除"桌面版"别名）
-DMG="$(ls "$DIST_DIR"/*.dmg 2>/dev/null | grep -v '桌面版' | sort -V | tail -1 || true)"
+# 找最新 DMG：优先选英文 dmg (BookmarkTool-xxx-macos.dmg)；兜底选任意 dmg 并排除明显别名
+DMG="$(ls "$DIST_DIR"/BookmarkTool-*-macos.dmg 2>/dev/null | sort -V | tail -1 || true)"
+if [ -z "$DMG" ]; then
+  DMG="$(ls "$DIST_DIR"/*.dmg 2>/dev/null | grep -vE '桌面版|旧版' | sort -V | tail -1 || true)"
+fi
 if [ -z "$DMG" ]; then
   echo "❌ dist/ 里没有 dmg 文件。请先 npm run dist"
   exit 1
@@ -68,11 +71,22 @@ cat > "$README" << 'EOF'
   A: 打开应用后看右上角「随附扩展」状态，按提示操作
 EOF
 
-# 打 zip
+# 打 zip（用 macOS 原生 ditto，不用 zip 命令 —— zip -X 对大 dmg 文件会截断成空！）
 cd "$DIST_DIR"
 rm -f "$PKG_NAME"
-ditto -c -k --sequesterRsrc --rsrc friend-package "$PKG_NAME"
+ditto -c -k -X "$STAGE_DIR" "$PKG_NAME"
 cd "$PROJECT_ROOT"
+
+# 验证：zip 里 dmg MD5 必须 = dist 里 dmg MD5（防 dmg 在 zip 时被截断）
+SOURCE_DMG_MD5="$(md5 -q "$DMG" | awk '{print $NF}')"
+ZIP_DMG_MD5="$(unzip -p "$DIST_DIR/$PKG_NAME" "$(basename "$DMG")" | md5 -q)"
+if [ "$SOURCE_DMG_MD5" != "$ZIP_DMG_MD5" ]; then
+  echo "❌ 严重：zip 里的 dmg 与源 dmg MD5 不一致（zip 损坏）"
+  echo "   源 dmg: $SOURCE_DMG_MD5"
+  echo "   zip里:  $ZIP_DMG_MD5"
+  exit 1
+fi
+echo "✅ dmg 完整性验证：$ZIP_DMG_MD5"
 
 echo ""
 echo "✅ 打包完成：dist/$PKG_NAME"
