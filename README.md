@@ -164,16 +164,6 @@ A：当前仅 macOS。代码基于 Electron，理论上可移植，但暂未做�
 | `ext/` | 常驻扩展源码（manifest.json + background.js），打包为 `ext/bookmark-cleaner-extension.zip` |
 | `scripts/` | 版本号管理（`bump-version.mjs` / `sync-version.mjs` / `rename-dmg.mjs`） |
 
-## 🔢 版本号规则
-
-采用 `主.次.修.构建` 四段展示版（如 `1.2.0.3`）：
-
-- 极小改动（几行 hotfix）→ 第四位 +1
-- 小改动（一个功能）→ 第三段 +1
-- 中等（新功能模块）→ 第二段 +1
-- 大改（架构重写）→ 第一段 +1
-
-DMG 文件名与界面版本号同步变化，方便区分每次构建。
 
 ## 🤝 反馈与贡献
 
