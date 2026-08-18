@@ -97,26 +97,40 @@ function singleRequest(url, opts, method, signal) {
       },
       (res) => {
         clearTimeout(timer);
-        // res 阶段也要监听 error/close —— 服务器发完 header 后卡住不传 body 时，destroy req
-        // 不会触发这里 resolve，必须显式 reject。
-        res.on('error', (err) => settle(reject, err));
-        res.on('close', () => { if (!settled) settle(reject, Object.assign(new Error('aborted'), { code: 'ABORTED' })); });
-        // HEAD 无 body：resume 让 socket 回到连接池复用
-        if (method === 'HEAD') { res.resume(); settle(resolve, { status: res.statusCode, headers: res.headers, location: res.headers.location }); return; }
-        // GET：正常状态(2xx/3xx)只取首字节就销毁；错误状态(4xx/5xx)读前 2KB 做"伪404"内容分析
-        if (res.statusCode >= 200 && res.statusCode < 400) { res.destroy(); settle(resolve, { status: res.statusCode, headers: res.headers, location: res.headers.location }); return; }
-        // 4xx / 5xx：读取部分 body 判断是否为"假错误"（如 WordPress 自定义 404 模板实际有内容）
+        const st = res.statusCode;
+        const loc = res.headers.location;
+        // 主动截断标记：读到足够片段(2KB)后主动 destroy，此时连接关闭是预期内，应返回已读片段而非报错
+        let done = false;
+        let deliberateDestroy = false;
         const chunks = [];
         let totalLen = 0;
         const MAX_BODY = 2048;
+        const finish = () => {
+          if (done) return; done = true;
+          const body = Buffer.concat(chunks).toString('utf-8');
+          settle(resolve, { status: st, headers: res.headers, location: loc, bodySnippet: body });
+        };
+        const onErr = (err) => {
+          // 主动截断或已结算：返回已读片段（ECONNRESET 多为 destroy 后的正常尾随错误）
+          if (deliberateDestroy || done) { if (!done) finish(); return; }
+          settle(reject, err);
+        };
+        res.on('error', onErr);
+        // HEAD 无 body：resume 让 socket 回到连接池复用
+        if (method === 'HEAD') { res.resume(); settle(resolve, { status: st, headers: res.headers, location: loc }); return; }
+        // GET：2xx/3xx/4xx/5xx 统一读前 2KB 片段——2xx 用于登录页检测，4xx/5xx 用于软404/伪错误识别。
+        // 读完即断（不下载正文），既拿到内容分析又省带宽；真正的网络卡死由上方 timer 兜底 reject。
         res.on('data', (c) => {
           totalLen += c.length;
           if (totalLen <= MAX_BODY) chunks.push(c);
-          else res.destroy(); // 够了就停，不浪费带宽
+          else { deliberateDestroy = true; res.destroy(); } // 够了就停，不浪费带宽
         });
-        res.on('end', () => {
-          const body = Buffer.concat(chunks).toString('utf-8');
-          settle(resolve, { status: res.statusCode, headers: res.headers, location: res.headers.location, bodySnippet: body });
+        res.on('end', finish);
+        res.on('close', () => {
+          if (done) return;
+          // 主动截断或正常关闭 → 返回已读片段；被 abort 中断 → 按中止处理
+          if (deliberateDestroy || !(signal && signal.aborted)) finish();
+          else settle(reject, Object.assign(new Error('aborted'), { code: 'ABORT_ERR' }));
         });
       }
     );
@@ -186,7 +200,34 @@ function looksLikeRealPage(bodySnippet) {
   return false;
 }
 
-export function classify(status, error, bodySnippet) {
+// 判断 URL 是否指向登录 / 授权页（用于识别"跳转到登录页"的需登录站点）
+function isLoginUrl(u) {
+  if (!u) return false;
+  let path = u;
+  try { const p = new URL(u); path = p.pathname + p.search; } catch {}
+  return /(^|\/)(login|signin|sign-in|log-in|wp-login|auth|oauth|sso|passport|session\/new|account\/login|member\/login|user\/login|cas\/login)(\/|$|\?|#|\.)/i.test(path)
+    || /[?&](redirect|return|next|continue|goto)=/i.test(path) && /login|signin|auth/i.test(path);
+}
+
+// 判断响应体是否为登录 / 认证页（把"需要登录才能访问"的站点从失效中区分出来）。
+// 保守策略：必须有明确登录信号，避免把带"登录"链接的公开页误判为需登录。
+function looksLikeLoginPage(html) {
+  if (!html || html.length < 30) return false;
+  // 强信号：密码输入框 —— 几乎必然是登录 / 认证页
+  if (/<input[^>]+(type=["']?password|name=["']?(pass|pwd|password)|id=["']?password)/i.test(html)) return true;
+  // 表单 + 登录关键词：避免只因页脚有"登录"链接就误判
+  const hasForm = /<form[\s>]/i.test(html);
+  const loginKw = /(登录|登陆|sign\s*in|log\s*in|会员登录|用户?登录|账号登录|手机登录|邮箱登录|登录注册|注册登录|请登录|立即登录)/i.test(html);
+  if (hasForm && loginKw) return true;
+  return false;
+}
+
+export function classify(status, error, bodySnippet, extra = {}) {
+  const finalUrl = extra.finalUrl || '';
+  const redirectChain = extra.redirectChain || [];
+  // 登录跳转：最终 URL 或任一重定向跳板指向登录 / 授权页
+  const loginRedir = isLoginUrl(finalUrl) || redirectChain.some((h) => isLoginUrl(h.to));
+
   if (error) {
     switch (error.code) {
       case 'ECONNREFUSED': return { ok: false, reason: 'connection_refused' };
@@ -206,19 +247,28 @@ export function classify(status, error, bodySnippet) {
       default: return { ok: false, reason: 'network', suspicious: true };
     }
   }
-  if (status >= 200 && status < 300) return { ok: true, reason: 'ok' };
-  if (status >= 300 && status < 400) return { ok: true, reason: 'redirect' };
-  // 401 / 403：很多站点（尤其是国内软件下载站、CDN防护站点）会对非浏览器请求返回
-  // 401/403（反爬、UA检测、Cookie校验等），但浏览器正常访问。默认标记为可疑，不直接判死。
+  if (status >= 200 && status < 300) {
+    // 登录墙：200 但实际是登录页（有密码框/登录表单），或重定向到登录地址 → 需登录（非失效、非有效）
+    if (loginRedir) return { ok: false, reason: 'login_required', suspicious: false, note: '页面跳转到登录页，需要登录后才能访问' };
+    if (looksLikeLoginPage(bodySnippet)) return { ok: false, reason: 'login_required', suspicious: false, note: '需要登录后才能访问（已识别登录页）' };
+    return { ok: true, reason: 'ok' };
+  }
+  if (status >= 300 && status < 400) {
+    // 3xx 正常当作有效（重定向）；但若跳转到登录页 → 需登录
+    if (loginRedir) return { ok: false, reason: 'login_required', suspicious: false, note: '重定向到登录页，需要登录后才能访问' };
+    return { ok: true, reason: 'redirect' };
+  }
+  // 401 / 403：需登录 / 授权。若响应体明确是登录页 → 高置信「需登录」（不标可疑）；
+  // 否则可能是反爬拦截 / 地域限制，保守标可疑让人工确认，避免误杀。
   if (status === 401 || status === 403) {
-    const isRealPage = looksLikeRealPage(bodySnippet);
+    const isLoginPage = looksLikeLoginPage(bodySnippet);
     return {
       ok: false,
       reason: 'login_required',
-      suspicious: true,
-      note: isRealPage
-        ? '访问被拒绝(401/403)但页面有正常内容，可能是反爬或UA拦截'
-        : '访问被拒绝(401/403)，可能是反爬/登录要求/地域限制，建议手动确认',
+      suspicious: !isLoginPage,
+      note: isLoginPage
+        ? '需要登录 / 授权后才能访问（已识别登录页）'
+        : '访问被拒绝(401/403)，可能是登录要求 / 反爬拦截 / 地域限制，建议手动确认',
     };
   }
   // 404 / 410：检查响应体是否为"假 404"（WordPress 自定义模板等实际有内容的页面）
@@ -368,7 +418,7 @@ export async function checkAll(bookmarks, opts = {}, handlers = {}) {
         }
       }
       release();
-      const cls = classify(result.status, result.error, result.bodySnippet);
+      const cls = classify(result.status, result.error, result.bodySnippet, { finalUrl: result.finalUrl, redirectChain: result.redirectChain });
       const finalResult = {
         url,
         status: result.status,
