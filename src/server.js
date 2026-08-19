@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { runPipeline, findChromiumProfiles } from './core/pipeline.js';
 import { loadBookmarks, buildFolderTree, parseChromeJson, parseHtmlBookmarks, matchesSelectedFolders } from './core/parser.js';
 import { toHtml, toCsv, toJson } from './core/reporter.js';
-import { toSafariHtml } from './core/safari-export.js';
+import { toSafariHtml, toChromeHtml } from './core/safari-export.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, '..', 'public');
@@ -465,6 +465,25 @@ function enqueueExtCommand(type, payload = {}, timeoutMs = 30000) {
 
 // （Chrome for Testing 临时加载路线已废弃；同步账号删除改为常驻扩展桥接，见 deleteViaExtension）
 
+// #74: 删除前自动备份——把待删书签写成 Chrome 可导入的 Netscape HTML（带时间戳），
+// 删错了用户可在 Chrome 书签管理器「导入书签」→ 选择该 HTML 重新导入恢复。
+async function backupDeletedBookmarks(items) {
+  try {
+    if (!Array.isArray(items) || !items.length) return { ok: false, skipped: true };
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const backupDir = path.join(OUTPUT, 'backups');
+    ensureDir(backupDir);
+    const filename = `bookmarks-deleted-${ts}.html`;
+    const outPath = path.join(backupDir, filename);
+    const html = toChromeHtml(items, `书签清理备份 ${ts}`);
+    fs.writeFileSync(outPath, html, 'utf8');
+    return { ok: true, path: outPath, filename, url: `/output/backups/${filename}`, count: items.length };
+  } catch (e) {
+    console.error('[backup] 删除前备份失败:', e.message);
+    return { ok: false, error: e.message };
+  }
+}
+
 // 经由常驻扩展桥接删除（要求扩展已连接到本服务）
 async function deleteViaExtension(body) {
   const items = Array.isArray(body.items) ? body.items : [];
@@ -501,6 +520,8 @@ async function deleteViaExtension(body) {
     if (!idsToRemove.length) {
       return { ok: true, removed: 0, notFound: items.length, verified: true, isSynced: true, viaExtension: true, message: '同步账号中未找到匹配的书签，未做删除。' };
     }
+    // #74: 真正删除前，先自动备份待删书签为可重新导入的 HTML
+    const backup = await backupDeletedBookmarks(items);
     const remRes = await enqueueExtCommand('remove', { ids: idsToRemove }, 30000);
     const removed = (remRes && remRes.data && remRes.data.removed) || [];
     const tree2 = ((await enqueueExtCommand('getTree', {}, 60000)).data) || [];
@@ -508,15 +529,20 @@ async function deleteViaExtension(body) {
     const verified = stillThere.length === 0;
     const totalMs = Date.now() - t0;
     console.log(`[bridge] full delete done in ${totalMs}ms: removed=${removed.length} verified=${verified}`);
+    const backupNote = backup.ok
+      ? `\n\n📦 已自动备份 ${backup.count} 条待删书签到：\n${backup.path}\n（如需恢复：Chrome 书签管理器 → 右上「⋮」→ 导入书签 → 选择该 HTML 文件即可重新导入。）`
+      : '';
     return {
       ok: true, removed: removed.length, notFound: notFound.length, verified,
       isSynced: true, viaExtension: true,
+      backup: backup.ok ? { filename: backup.filename, url: backup.url, count: backup.count } : null,
       diag: { treeTookMs: treeMs, totalTookMs: totalMs, treeSize: tree.length },
       message:
         `✅ 已通过 Chrome 官方接口删除 ${removed.length} 条同步书签，删除已作为墓碑同步到 Google 账号。\n` +
         `请保持 Chrome 打开几秒，确认云端同步完成——此后这些书签不会再被"复活"。` +
         (stillThere.length ? `\n⚠️ 仍有 ${stillThere.length} 条未删除（可能在其它位置或 url 不完全匹配）。` : '') +
-        (notFound.length ? `\n（另有 ${notFound.length} 条未匹配到，已跳过。）` : ''),
+        (notFound.length ? `\n（另有 ${notFound.length} 条未匹配到，已跳过。）` : '') +
+        backupNote,
     };
   } catch (e) {
     const errMs = Date.now() - t0;

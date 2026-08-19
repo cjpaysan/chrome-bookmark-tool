@@ -95,6 +95,9 @@ body {
 
 .hidden { display: none !important; }
 .muted { color: var(--text-secondary); font-weight: 400; }
+.backup-tip { background: color-mix(in srgb, var(--st-login) 12%, var(--bg-subtle)); border: 1px solid color-mix(in srgb, var(--st-login) 40%, transparent); border-radius: 10px; padding: 10px 14px; font-size: 13px; line-height: 1.6; }
+.btn-link { display: inline-block; margin-top: 6px; color: #fff; background: var(--accent); text-decoration: none; font-size: 13px; font-weight: 500; padding: 7px 14px; border-radius: 8px; }
+.btn-link:hover { background: var(--accent-press); }
 
 /* ---------- 应用外壳 ---------- */
 .app { display: flex; flex-direction: column; height: 100vh; }

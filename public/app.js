@@ -1,8 +1,8 @@
 const $ = (s) => document.querySelector(s);
 // BUILD 标识：语义化版本号（从 package.json 注入）+ 本次发布构建时间
 // 格式 "v1.0.5 @ 2026-08-16T20:52" — 用户一眼能看出是否升级到新版本
-const BUILD = 'v1.2.0.7 @ 2026-08-18T01:41';
-const VERSION = '1.2.0.7'; // 语义化版本号（与 package.json 一致）
+const BUILD = 'v1.2.0.8 @ 2026-08-19T12:35';
+const VERSION = '1.2.0.8'; // 语义化版本号（与 package.json 一致）
 const statusColor = { valid: '#34C759', dead: '#FF3B30', login: '#FF9500', unknown: '#8E8E93', suspect: '#FF9500' };
 const statusLabel = { valid: '有效', dead: '失效', login: '需登录', unknown: '未检测', suspect: '疑似失效' };
 // 失效/需登录等原因的中文含义，方便小白用户看懂（有效的"ok/redirect"不在此列出，原因列留空）
@@ -1259,8 +1259,13 @@ async function doDelete(gi, items) {
 
 function showSuccess(gi, items, data) {
   openModal();
-  setModal('✅ 删除完成', `<p>${esc(data.message || '已删除同步书签。')}</p>
-    <p class="muted">随附扩展仍常驻于你的 Chrome（只听本机工具指令）。以后删除同步书签会自动生效；不需要时可在 chrome://extensions 移除。</p>`, false);
+  let html = `<p>${esc(data.message || '已删除同步书签。')}</p>`;
+  if (data.backup && data.backup.ok) {
+    html += `<p class="backup-tip">📦 已自动生成备份（${data.backup.count} 条），删错了可一键下载恢复：<br>`
+      + `<a class="btn-link" href="${esc(data.backup.url)}" download="${esc(data.backup.filename)}">⬇ 下载备份 HTML</a></p>`;
+  }
+  html += `<p class="muted">随附扩展仍常驻于你的 Chrome（只听本机工具指令）。以后删除同步书签会自动生效；不需要时可在 chrome://extensions 移除。</p>`;
+  setModal('✅ 删除完成', html, false);
   smActions().innerHTML = '';
   modalBtn('完成', () => { closeModal(); markDeleted(gi, items); }, false, true);
 }

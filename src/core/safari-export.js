@@ -32,4 +32,34 @@ ${body}
 `;
 }
 
-export default { toSafariHtml };
+export default { toSafariHtml, toChromeHtml };
+
+/**
+ * 把「待删除书签列表」导出为 Chrome / Safari 可导入的 Netscape 格式 HTML。
+ * 与 toSafariHtml 同格式（Chrome 的「导入书签」→「书签 HTML 文件」可直接读取）。
+ * @param {Array<{url,title,folder?}>} items 待删书签（folder 可为路径数组或字符串）
+ * @param {string} [rootName]
+ */
+export function toChromeHtml(items, rootName = '书签清理备份') {
+  const root = { type: 'folder', name: rootName, children: [] };
+  const findOrCreate = (parent, name) => {
+    let f = parent.children.find((c) => c.type === 'folder' && c.name === name);
+    if (!f) { f = { type: 'folder', name, children: [] }; parent.children.push(f); }
+    return f;
+  };
+  for (const it of (items || [])) {
+    const folderPath = Array.isArray(it.folder)
+      ? it.folder.filter(Boolean)
+      : (it.folder ? [String(it.folder)] : []);
+    let parent = root;
+    for (const seg of folderPath) parent = findOrCreate(parent, seg);
+    parent.children.push({
+      type: 'bookmark',
+      url: it.url || '',
+      title: it.title || it.url || '（无标题）',
+      addDate: Date.now(),
+    });
+  }
+  return toSafariHtml(root, rootName);
+}
+
