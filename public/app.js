@@ -1,8 +1,8 @@
 const $ = (s) => document.querySelector(s);
 // BUILD 标识：语义化版本号（从 package.json 注入）+ 本次发布构建时间
 // 格式 "v1.0.5 @ 2026-08-16T20:52" — 用户一眼能看出是否升级到新版本
-const BUILD = 'v1.2.0.8 @ 2026-08-19T12:35';
-const VERSION = '1.2.0.8'; // 语义化版本号（与 package.json 一致）
+const BUILD = 'v1.2.0.9 @ 2026-08-19T13:08';
+const VERSION = '1.2.0.9'; // 语义化版本号（与 package.json 一致）
 const statusColor = { valid: '#34C759', dead: '#FF3B30', login: '#FF9500', unknown: '#8E8E93', suspect: '#FF9500' };
 const statusLabel = { valid: '有效', dead: '失效', login: '需登录', unknown: '未检测', suspect: '疑似失效' };
 // 失效/需登录等原因的中文含义，方便小白用户看懂（有效的"ok/redirect"不在此列出，原因列留空）
@@ -1267,7 +1267,35 @@ function showSuccess(gi, items, data) {
   html += `<p class="muted">随附扩展仍常驻于你的 Chrome（只听本机工具指令）。以后删除同步书签会自动生效；不需要时可在 chrome://extensions 移除。</p>`;
   setModal('✅ 删除完成', html, false);
   smActions().innerHTML = '';
+  // #75: 应用内撤销删除——一键把刚删的书签恢复回原文件夹
+  const undoDelBtn = modalBtn('↩ 撤销删除', () => undoDeleteOp(gi, items), false, false);
+  undoDelBtn.classList.add('btn-undo');
   modalBtn('完成', () => { closeModal(); markDeleted(gi, items); }, false, true);
+}
+
+// #75: 撤销删除——调用后端 /api/undo/delete，把刚删的书签重建回原文件夹
+async function undoDeleteOp(gi, items) {
+  setModal('↩ 正在恢复…', '<p>正在通过 Chrome 官方接口把书签恢复回原文件夹…</p>', true);
+  smActions().innerHTML = '';
+  try {
+    const r = await fetch('/api/undo/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const d = await r.json();
+    if (d.ok) {
+      setModal('✅ 已恢复', `<p>${esc(d.message || '已恢复被删书签。')}</p>`, false);
+      smActions().innerHTML = '';
+      modalBtn('完成', () => closeModal(), false, true);
+    } else {
+      let msg = esc(d.error || '撤销失败');
+      if (d.code === 'NO_EXT') msg += '\n\n请先在 Chrome 中启用随附扩展（书签清理助手），等待顶部状态显示「已连接 ✓」后重试。';
+      setModal('⚠️ 撤销失败', `<p style="white-space:pre-wrap">${msg}</p>`, false);
+      smActions().innerHTML = '';
+      modalBtn('关闭', () => closeModal(), false, true);
+    }
+  } catch (e) {
+    setModal('⚠️ 撤销失败', `<p>${esc(e.message)}</p>`, false);
+    smActions().innerHTML = '';
+    modalBtn('关闭', () => closeModal(), false, true);
+  }
 }
 
 function showChecklist(gi, items, reason) {
@@ -1802,7 +1830,7 @@ async function doMoveBookmarks(bms, targetFolderPath) {
     });
     const d = await r.json();
     if (d.ok) {
-      alert(d.message || '✅ 移动完成');
+      showMoveSuccess(d, bms, targetFolderPath);
     } else {
       alert(d.error || '移动失败');
       if (d.code === 'NO_EXT') alert('未检测到随附扩展。请在 chrome://extensions 启用「书签清理助手（本地桥）」后重试。');
@@ -1813,6 +1841,42 @@ async function doMoveBookmarks(bms, targetFolderPath) {
   } finally {
     btn.disabled = false;
     btn.textContent = prevText;
+  }
+}
+
+// #75: 移动成功弹窗（带「撤销移动」按钮）
+function showMoveSuccess(d, bms, targetPath) {
+  openModal();
+  const html = `<p>${esc(d.message || '移动完成')}</p>`;
+  setModal('✅ 移动完成', html, false);
+  smActions().innerHTML = '';
+  const undoMoveBtn = modalBtn('↩ 撤销移动', () => undoMoveOp(d, bms, targetPath), false, false);
+  undoMoveBtn.classList.add('btn-undo');
+  modalBtn('完成', () => closeModal(), false, true);
+}
+
+// #75: 撤销移动——调用后端 /api/undo/move，把刚移动的书签移回原父文件夹
+async function undoMoveOp(d, bms, targetPath) {
+  setModal('↩ 正在恢复…', '<p>正在把书签移回原文件夹…</p>', true);
+  smActions().innerHTML = '';
+  try {
+    const r = await fetch('/api/undo/move', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const dd = await r.json();
+    if (dd.ok) {
+      setModal('✅ 已恢复', `<p>${esc(dd.message || '已恢复。')}</p>`, false);
+      smActions().innerHTML = '';
+      modalBtn('完成', () => closeModal(), false, true);
+    } else {
+      let msg = esc(dd.error || '撤销失败');
+      if (dd.code === 'NO_EXT') msg += '\n\n请先在 Chrome 中启用随附扩展（书签清理助手），等待顶部状态显示「已连接 ✓」后重试。';
+      setModal('⚠️ 撤销失败', `<p style="white-space:pre-wrap">${msg}</p>`, false);
+      smActions().innerHTML = '';
+      modalBtn('关闭', () => closeModal(), false, true);
+    }
+  } catch (e) {
+    setModal('⚠️ 撤销失败', `<p>${esc(e.message)}</p>`, false);
+    smActions().innerHTML = '';
+    modalBtn('关闭', () => closeModal(), false, true);
   }
 }
 $('#selMove').addEventListener('click', moveSelectedBookmarks);

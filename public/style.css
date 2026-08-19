@@ -99,6 +99,14 @@ body {
 .btn-link { display: inline-block; margin-top: 6px; color: #fff; background: var(--accent); text-decoration: none; font-size: 13px; font-weight: 500; padding: 7px 14px; border-radius: 8px; }
 .btn-link:hover { background: var(--accent-press); }
 
+/* #75: 应用内撤销按钮（与 .backup-tip 同色系，提示"可回退"） */
+.btn-undo {
+  background: color-mix(in srgb, var(--st-login) 14%, var(--bg-subtle));
+  color: color-mix(in srgb, var(--st-login) 80%, var(--text-secondary));
+  border-color: color-mix(in srgb, var(--st-login) 45%, transparent);
+}
+.btn-undo:hover { background: color-mix(in srgb, var(--st-login) 22%, var(--bg-subtle)); }
+
 /* ---------- 应用外壳 ---------- */
 .app { display: flex; flex-direction: column; height: 100vh; }
 

@@ -26,6 +26,28 @@ const jobs = new Map();
 const imports = new Map();
 let lastReport = null;
 
+// #75: 应用内撤销——最近一次「删除 / 移动」操作的可逆缓冲（持久化到 OUTPUT/.undo.json，
+// 即使应用重启，只要 Chrome 常驻扩展还在，仍可在应用内一键还原）。
+// 结构：{ kind: 'delete' | 'move', ts, items: [...] }
+//   delete: items = [{ url, title, folder: string[] }]（folder 为原文件夹路径，用于撤销时重建回原处）
+//   move:   items = [{ id, url, title, parentId }]（parentId 为移动前的原父文件夹 id）
+let lastUndo = null;
+const UNDO_FILE = path.join(OUTPUT, '.undo.json');
+function loadUndo() {
+  try {
+    if (!fs.existsSync(UNDO_FILE)) return;
+    const s = JSON.parse(fs.readFileSync(UNDO_FILE, 'utf8'));
+    if (s && s.items && s.items.length) lastUndo = s;
+  } catch {}
+}
+function saveUndo() {
+  try {
+    if (lastUndo) fs.writeFileSync(UNDO_FILE, JSON.stringify(lastUndo), 'utf8');
+    else { try { fs.unlinkSync(UNDO_FILE); } catch {} }
+  } catch (e) { console.error('[undo] 持久化失败:', e.message); }
+}
+loadUndo();
+
 // 断点续扫：当前活跃扫描会话（用于增量持久化，崩溃/关闭后可续扫）
 let currentSession = null;
 let sessionSaveTimer = null;
@@ -529,6 +551,14 @@ async function deleteViaExtension(body) {
     const verified = stillThere.length === 0;
     const totalMs = Date.now() - t0;
     console.log(`[bridge] full delete done in ${totalMs}ms: removed=${removed.length} verified=${verified}`);
+
+    // #75: 记录可撤销的删除操作（含每条书签的原文件夹路径，供撤销时重建回原处）
+    lastUndo = {
+      kind: 'delete',
+      ts: Date.now(),
+      items: items.map((it) => ({ url: it.url, title: it.title, folder: Array.isArray(it.folder) ? it.folder : (typeof it.folder === 'string' ? [it.folder] : []) })),
+    };
+    saveUndo();
     const backupNote = backup.ok
       ? `\n\n📦 已自动备份 ${backup.count} 条待删书签到：\n${backup.path}\n（如需恢复：Chrome 书签管理器 → 右上「⋮」→ 导入书签 → 选择该 HTML 文件即可重新导入。）`
       : '';
@@ -697,13 +727,16 @@ async function moveViaExtension(body) {
     const moves = [];
     const notFound = [];
     const alreadyThere = [];
+    // #75: 记录每个节点的移动前原父文件夹 id，供「撤销移动」移回原处
+    const origParents = new Map();
+    for (const n of tree) { if (n.id) origParents.set(n.id, n.parentId); }
     for (const it of items) {
       const want = normNoProto(it.url);
       let m = tree.filter(n => normNoProto(n.url) === want);
       if (!m.length && it.title) m = tree.filter(n => (n.title || '').trim() === (it.title || '').trim());
       if (!m.length) { notFound.push(it); continue; }
       for (const n of m) {
-        moves.push({ id: n.id, parentId: target.id });
+        moves.push({ id: n.id, parentId: target.id, url: it.url, title: it.title });
       }
     }
     if (!moves.length) {
@@ -715,6 +748,16 @@ async function moveViaExtension(body) {
     const moved = (mvRes && mvRes.data && mvRes.data.moved) || [];
     const totalMs = Date.now() - t0;
     console.log(`[bridge] move done in ${totalMs}ms: moved=${moved.length}/${moves.length}`);
+
+    // #75: 记录可撤销的移动操作（含每条书签的原父文件夹 id）
+    lastUndo = {
+      kind: 'move',
+      ts: Date.now(),
+      target: target.path,
+      items: moves.map((mv) => ({ id: mv.id, url: mv.url, title: mv.title, parentId: origParents.get(mv.id) || null })),
+    };
+    saveUndo();
+
     return {
       ok: true,
       moved: moved.length,
@@ -736,6 +779,99 @@ async function moveViaExtension(body) {
       code: e.message?.includes('超时') ? 'EXT_TIMEOUT' : 'EXT_ERROR',
       diag: { failedAfterMs: errMs, lastContact: extState.lastContact, activeWaiters: extState.waiters.length, queueLen: extState.queue.length },
     };
+  }
+}
+
+// #75: 应用内撤销——把文件夹路径（string[]）解析为 Chrome 文件夹 id
+// 匹配顺序：精确 path → 标准化 path → 末级标题 → 兜底「书签栏」根
+function resolveFolderId(folders, folderArr) {
+  if (!Array.isArray(folderArr) || !folderArr.length) return null;
+  const target = folderArr.join(' / ');
+  const norm = (s) => (s || '').trim().normalize('NFC').replace(/\s+/g, ' ');
+  let f = folders.find((x) => x.path === target);
+  if (!f) f = folders.find((x) => norm(x.path) === norm(target));
+  if (!f) f = folders.find((x) => x.title === folderArr[folderArr.length - 1]);
+  if (!f) f = folders.find((x) => x.path === '书签栏');
+  return f ? f.id : null;
+}
+
+// #75: 撤销删除——把上次删除的书签重建回各自原文件夹
+async function undoDeleteViaExtension() {
+  if (!lastUndo || lastUndo.kind !== 'delete') return { ok: false, error: '没有可撤销的删除操作。' };
+  const connected = extState.lastContact && Date.now() - extState.lastContact < 120000;
+  if (!connected) return { ok: false, code: 'NO_EXT', error: '未检测到随附扩展（书签清理助手）。请先在 Chrome 中安装并启用随附扩展，再执行撤销。' };
+  try {
+    const foldersRes = await enqueueExtCommand('getFolders', {}, 60000);
+    const folders = (foldersRes && foldersRes.data) || [];
+    const creates = [];
+    const skipped = [];
+    for (const it of lastUndo.items) {
+      const pid = resolveFolderId(folders, it.folder);
+      if (!pid) { skipped.push(it); continue; }
+      creates.push({ parentId: pid, url: it.url, title: it.title });
+    }
+    if (!creates.length) {
+      return { ok: true, created: 0, skipped: lastUndo.items.length, message: '没有可恢复的书签（目标文件夹均已不存在）。' };
+    }
+    const cRes = await enqueueExtCommand('create', { creates }, 30000);
+    const created = (cRes && cRes.data && cRes.data.created) || [];
+    // 撤销成功后清空缓冲（再点不会重复重建）
+    lastUndo = null; saveUndo();
+    return {
+      ok: true,
+      created: created.length,
+      attempted: creates.length,
+      skipped: skipped.length,
+      message: `✅ 已恢复 ${created.length} 条被删书签到原文件夹。` + (skipped.length ? `\n（另有 ${skipped.length} 条因目标文件夹不存在，未能恢复。）` : ''),
+    };
+  } catch (e) {
+    return { ok: false, error: '撤销删除过程中出错：' + e.message, code: e.message?.includes('超时') ? 'EXT_TIMEOUT' : 'EXT_ERROR' };
+  }
+}
+
+// #75: 撤销移动——把上次移动的书签移回各自原父文件夹
+async function undoMoveViaExtension() {
+  if (!lastUndo || lastUndo.kind !== 'move') return { ok: false, error: '没有可撤销的移动操作。' };
+  const connected = extState.lastContact && Date.now() - extState.lastContact < 120000;
+  if (!connected) return { ok: false, code: 'NO_EXT', error: '未检测到随附扩展（书签清理助手）。请先在 Chrome 中安装并启用随附扩展，再执行撤销。' };
+  const normNoProto = (u) => {
+    if (!u) return '';
+    try { const U = new URL(u); return U.hostname.toLowerCase() + U.pathname.replace(/\/+$/, '') + U.search; }
+    catch { return (u || '').trim().toLowerCase(); }
+  };
+  try {
+    const treeRes = await enqueueExtCommand('getTree', {}, 60000);
+    const tree = (treeRes && treeRes.data) || [];
+    const idSet = new Set(tree.map((n) => n.id));
+    const moves = [];
+    const notFound = [];
+    for (const it of lastUndo.items) {
+      let id = it.id;
+      if (!id || !idSet.has(id)) {
+        // 兜底：按 url（或标题）重新在最新书签树中定位（节点 id 可能因其它操作变化）
+        let m = tree.filter((n) => normNoProto(n.url) === normNoProto(it.url));
+        if (!m.length && it.title) m = tree.filter((n) => (n.title || '').trim() === (it.title || '').trim());
+        if (!m.length) { notFound.push(it); continue; }
+        id = m[0].id;
+      }
+      if (!it.parentId) { notFound.push(it); continue; }
+      moves.push({ id, parentId: it.parentId });
+    }
+    if (!moves.length) {
+      return { ok: true, moved: 0, notFound: lastUndo.items.length, message: '没有可移回的节点（书签可能已被删除）。' };
+    }
+    const mvRes = await enqueueExtCommand('move', { moves }, 30000);
+    const moved = (mvRes && mvRes.data && mvRes.data.moved) || [];
+    lastUndo = null; saveUndo();
+    return {
+      ok: true,
+      moved: moved.length,
+      attempted: moves.length,
+      notFound: notFound.length,
+      message: `✅ 已撤销移动，恢复 ${moved.length} 条书签到原位置。` + (notFound.length ? `\n（另有 ${notFound.length} 条未找到，已跳过。）` : ''),
+    };
+  } catch (e) {
+    return { ok: false, error: '撤销移动过程中出错：' + e.message, code: e.message?.includes('超时') ? 'EXT_TIMEOUT' : 'EXT_ERROR' };
   }
 }
 
@@ -1056,6 +1192,16 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/move-synced' && req.method === 'POST') {
       const body = await readBody(req);
       return sendJson(200, await moveViaExtension(body));
+    }
+
+    // #75: 撤销上一次「删除」操作（重建被删书签回原文件夹）
+    if (url.pathname === '/api/undo/delete' && req.method === 'POST') {
+      return sendJson(200, await undoDeleteViaExtension());
+    }
+
+    // #75: 撤销上一次「移动」操作（把书签移回原父文件夹）
+    if (url.pathname === '/api/undo/move' && req.method === 'POST') {
+      return sendJson(200, await undoMoveViaExtension());
     }
 
     // 下载随附扩展包（zip 包含 manifest.json + background.js）

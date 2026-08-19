@@ -1,7 +1,7 @@
 {
   "name": "bookmark-tool",
   "version": "1.2.0",
-  "displayVersion": "1.2.0.8",
+  "displayVersion": "1.2.0.9",
   "description": "Chrome 书签检测 / 整理 / Safari 同步工具（macOS 原生桌面版）",
   "type": "module",
   "main": "electron/main.cjs",
@@ -94,5 +94,5 @@
       ]
     }
   },
-  "_buildAt": "2026-08-19T12:35:32.121Z"
+  "_buildAt": "2026-08-19T13:08:32.205Z"
 }

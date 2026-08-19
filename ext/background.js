@@ -13,11 +13,12 @@ const KEEPALIVE_MS = 40000;
 // 防止多个 poll 并发运行（SW 被杀重启或闹钟多触发时）
 let pollingActive = false;
 
-// 扁平化书签树，只返回 type=url 的节点 {id, title, url}
-function flatten(nodes, out = []) {
+// 扁平化书签树，只返回 type=url 的节点 {id, title, url, parentId}
+// parentId 用于「撤销移动」时把书签移回原父文件夹
+function flatten(nodes, out = [], parentId = null) {
   for (const n of nodes || []) {
-    if (n.url) out.push({ id: n.id, title: n.title, url: n.url });
-    if (n.children && n.children.length) flatten(n.children, out);
+    if (n.url) out.push({ id: n.id, title: n.title, url: n.url, parentId });
+    if (n.children && n.children.length) flatten(n.children, out, n.id);
   }
   return out;
 }
@@ -98,6 +99,23 @@ async function moveBookmarks(moves) {
   }
   console.log(`[BM-ext] moveBookmarks: ${moved.length}/${moves?.length || 0} succeeded`);
   return moved;
+}
+
+// 重建书签（用于「撤销删除」）：chrome.bookmarks.create({parentId, title, url})
+// parentId 由服务端解析目标文件夹路径得到；title 缺省回退为 url。
+async function createBookmarks(creates) {
+  const created = [];
+  for (const c of creates || []) {
+    if (!c || !c.parentId || !c.url) continue;
+    try {
+      const node = await chrome.bookmarks.create({ parentId: c.parentId, title: c.title || c.url, url: c.url });
+      created.push({ id: node.id, url: c.url, title: c.title, parentId: c.parentId });
+    } catch (e) {
+      console.warn(`[BM-ext] create failed (${c.url}):`, e.message);
+    }
+  }
+  console.log(`[BM-ext] createBookmarks: ${created.length}/${creates?.length || 0} succeeded`);
+  return created;
 }
 
 async function postResult(requestId, ok, data, error) {
@@ -192,6 +210,9 @@ async function handleCommand(cmd) {
   } else if (cmd.type === 'move') {
     const moved = await moveBookmarks(cmd.moves);
     await postResult(cmd.id, true, { moved });
+  } else if (cmd.type === 'create') {
+    const created = await createBookmarks(cmd.creates);
+    await postResult(cmd.id, true, { created });
   } else {
     await postResult(cmd.id, false, null, '未知命令: ' + cmd.type);
   }
